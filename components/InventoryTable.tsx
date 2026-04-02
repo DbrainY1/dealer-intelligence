@@ -12,12 +12,12 @@ interface InventoryTableProps {
   rows: Row[];
 }
 
-type SortKey = "vin" | "year" | "make" | "model" | "list_price" | "days_on_lot" | "status";
+type SortKey = "stock" | "year" | "make" | "model" | "list_price" | "status";
 
 export default function InventoryTable({ rows }: InventoryTableProps) {
   const router = useRouter();
-  const [sortKey, setSortKey] = useState<SortKey>("days_on_lot");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<SortKey>("make");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filter, setFilter] = useState("");
 
   const toggleSort = (key: SortKey) => {
@@ -32,21 +32,21 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
   const filtered = rows.filter((r) => {
     const q = filter.toLowerCase();
     return (
-      r.snapshot.vin.toLowerCase().includes(q) ||
-      r.vehicle?.make?.toLowerCase().includes(q) ||
-      r.vehicle?.model?.toLowerCase().includes(q)
+      (r.vehicle?.vin ?? "").toLowerCase().includes(q) ||
+      (r.snapshot.stock_number ?? "").toLowerCase().includes(q) ||
+      (r.vehicle?.make ?? "").toLowerCase().includes(q) ||
+      (r.vehicle?.model ?? "").toLowerCase().includes(q)
     );
   });
 
   const sorted = [...filtered].sort((a, b) => {
     let aVal: string | number | null = null;
     let bVal: string | number | null = null;
-    if (sortKey === "vin") { aVal = a.snapshot.vin; bVal = b.snapshot.vin; }
+    if (sortKey === "stock") { aVal = a.snapshot.stock_number ?? ""; bVal = b.snapshot.stock_number ?? ""; }
     else if (sortKey === "year") { aVal = a.vehicle?.year ?? 0; bVal = b.vehicle?.year ?? 0; }
     else if (sortKey === "make") { aVal = a.vehicle?.make ?? ""; bVal = b.vehicle?.make ?? ""; }
     else if (sortKey === "model") { aVal = a.vehicle?.model ?? ""; bVal = b.vehicle?.model ?? ""; }
     else if (sortKey === "list_price") { aVal = a.snapshot.list_price ?? 0; bVal = b.snapshot.list_price ?? 0; }
-    else if (sortKey === "days_on_lot") { aVal = a.snapshot.days_on_lot ?? 0; bVal = b.snapshot.days_on_lot ?? 0; }
     else if (sortKey === "status") { aVal = a.snapshot.status ?? ""; bVal = b.snapshot.status ?? ""; }
 
     if (aVal === null) aVal = "";
@@ -56,12 +56,11 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
   });
 
   const headers: { key: SortKey; label: string }[] = [
-    { key: "vin", label: "VIN" },
+    { key: "stock", label: "Stock #" },
     { key: "year", label: "Year" },
     { key: "make", label: "Make" },
     { key: "model", label: "Model" },
     { key: "list_price", label: "Price" },
-    { key: "days_on_lot", label: "Days on Lot" },
     { key: "status", label: "Status" },
   ];
 
@@ -69,7 +68,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
     <div>
       <input
         type="text"
-        placeholder="Filter by VIN, make, model..."
+        placeholder="Filter by VIN, stock #, make, model..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="mb-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm w-full max-w-sm"
@@ -92,11 +91,11 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
           <tbody>
             {sorted.map((r) => (
               <tr
-                key={r.snapshot.vin + r.snapshot.id}
+                key={r.snapshot.id}
                 className="border-b border-gray-800 hover:bg-gray-800 cursor-pointer"
-                onClick={() => router.push(`/dashboard/vin/${r.snapshot.vin}`)}
+                onClick={() => r.vehicle?.vin && router.push(`/dashboard/vin/${r.vehicle.vin}`)}
               >
-                <td className="px-4 py-3 font-mono text-blue-400">{r.snapshot.vin}</td>
+                <td className="px-4 py-3 font-mono text-blue-400">{r.snapshot.stock_number ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.year ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.make ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.model ?? "—"}</td>
@@ -105,7 +104,6 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
                     ? `$${r.snapshot.list_price.toLocaleString()}`
                     : "—"}
                 </td>
-                <td className="px-4 py-3">{r.snapshot.days_on_lot ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`px-2 py-0.5 rounded text-xs ${
@@ -121,7 +119,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                   No results
                 </td>
               </tr>

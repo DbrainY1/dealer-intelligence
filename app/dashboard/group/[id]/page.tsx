@@ -1,5 +1,4 @@
 import { createServerSupabase } from "@/lib/supabase-server";
-import KPICard from "@/components/KPICard";
 import Link from "next/link";
 import type { Dealer, DealerGroup, InventorySnapshot, InventoryEvent } from "@/types";
 
@@ -19,7 +18,7 @@ export default async function GroupPage({ params }: PageProps) {
   const { data: dealers } = await supabase
     .from("dealers")
     .select("*")
-    .eq("group_id", params.id);
+    .eq("dealer_group_id", params.id);
 
   const dealerList: Dealer[] = dealers ?? [];
   const dealerIds = dealerList.map((d) => d.id);
@@ -32,12 +31,13 @@ export default async function GroupPage({ params }: PageProps) {
 
   const snapshotList: InventorySnapshot[] = snapshots ?? [];
 
-  const latestByVin = new Map<string, InventorySnapshot>();
+  // Latest snapshot per vehicle_id per dealer
+  const latestByKey = new Map<string, InventorySnapshot>();
   for (const s of snapshotList) {
-    const key = `${s.vin}:${s.dealer_id}`;
-    if (!latestByVin.has(key)) latestByVin.set(key, s);
+    const key = `${s.vehicle_id}:${s.dealer_id}`;
+    if (!latestByKey.has(key)) latestByKey.set(key, s);
   }
-  const latest = Array.from(latestByVin.values());
+  const latest = Array.from(latestByKey.values());
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -50,15 +50,15 @@ export default async function GroupPage({ params }: PageProps) {
 
   const eventList: InventoryEvent[] = events ?? [];
 
-  // Find VINs that appear at multiple dealers (potential transfers)
-  const vinDealerMap = new Map<string, Set<string>>();
+  // Find vehicle_ids at multiple dealers (potential transfers)
+  const vehicleDealerMap = new Map<number, Set<number>>();
   for (const s of latest) {
-    if (!vinDealerMap.has(s.vin)) vinDealerMap.set(s.vin, new Set());
-    vinDealerMap.get(s.vin)!.add(s.dealer_id);
+    if (!vehicleDealerMap.has(s.vehicle_id)) vehicleDealerMap.set(s.vehicle_id, new Set());
+    vehicleDealerMap.get(s.vehicle_id)!.add(s.dealer_id);
   }
-  const transferVins = Array.from(vinDealerMap.entries())
-    .filter(([, dealers]) => dealers.size > 1)
-    .map(([vin]) => vin)
+  const transferVehicleIds = Array.from(vehicleDealerMap.entries())
+    .filter(([, ds]) => ds.size > 1)
+    .map(([vid]) => vid)
     .slice(0, 10);
 
   return (
@@ -67,9 +67,6 @@ export default async function GroupPage({ params }: PageProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {dealerList.map((d) => {
           const dealerSnaps = latest.filter((s) => s.dealer_id === d.id && s.status === "active");
-          const avgDays = dealerSnaps.length
-            ? Math.round(dealerSnaps.reduce((sum, s) => sum + (s.days_on_lot ?? 0), 0) / dealerSnaps.length)
-            : 0;
           const avgPrice = dealerSnaps.length
             ? Math.round(dealerSnaps.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / dealerSnaps.length)
             : 0;
@@ -82,10 +79,6 @@ export default async function GroupPage({ params }: PageProps) {
                   <div>
                     <p className="text-gray-400">In Stock</p>
                     <p className="text-white font-bold">{dealerSnaps.length}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400">Avg Days</p>
-                    <p className="text-white font-bold">{avgDays}</p>
                   </div>
                   <div>
                     <p className="text-gray-400">Avg Price</p>
@@ -102,14 +95,14 @@ export default async function GroupPage({ params }: PageProps) {
         })}
       </div>
 
-      {transferVins.length > 0 && (
+      {transferVehicleIds.length > 0 && (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="text-white font-semibold mb-3">Possible Transfers (VINs at Multiple Rooftops)</h2>
+          <h2 className="text-white font-semibold mb-3">Possible Transfers (Vehicles at Multiple Rooftops)</h2>
           <div className="flex flex-wrap gap-2">
-            {transferVins.map((vin) => (
-              <Link key={vin} href={`/dashboard/vin/${vin}`} className="font-mono text-xs bg-gray-800 text-blue-400 px-2 py-1 rounded hover:bg-gray-700">
-                {vin}
-              </Link>
+            {transferVehicleIds.map((vid) => (
+              <span key={vid} className="font-mono text-xs bg-gray-800 text-blue-400 px-2 py-1 rounded">
+                VID-{vid}
+              </span>
             ))}
           </div>
         </div>

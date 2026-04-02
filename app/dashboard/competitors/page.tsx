@@ -72,10 +72,10 @@ export default async function CompetitorsPage() {
           <tbody>
             {eventList.slice(0, 20).map((e) => (
               <tr key={e.id} className="border-b border-gray-800">
-                <td className="px-4 py-3 font-mono text-amber-400">{e.vin}</td>
-                <td className="px-4 py-3">{dealers.find((d) => d.id === e.dealer_id)?.name ?? e.dealer_id}</td>
+                <td className="px-4 py-3 font-mono text-amber-400">VIN-{e.vehicle_id}</td>
+                <td className="px-4 py-3">{dealers.find((d) => d.id === e.dealer_id)?.name ?? `Dealer ${e.dealer_id}`}</td>
                 <td className="px-4 py-3">{e.event_date.slice(0, 10)}</td>
-                <td className="px-4 py-3">{e.price != null ? `$${e.price.toLocaleString()}` : "—"}</td>
+                <td className="px-4 py-3">{e.price_at_listing != null ? `$${e.price_at_listing.toLocaleString()}` : "—"}</td>
               </tr>
             ))}
             {eventList.length === 0 && (

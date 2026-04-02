@@ -21,16 +21,16 @@ interface Props {
 }
 
 export default function CompareClient({ dealers, snapshots }: Props) {
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<number[]>([]);
 
-  const toggleDealer = (id: string) =>
+  const toggleDealer = (id: number) =>
     setSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const selectedDealers = dealers.filter((d) => selected.includes(d.id));
 
   const latestByVin = new Map<string, InventorySnapshot>();
   for (const s of snapshots) {
-    const key = `${s.vin}:${s.dealer_id}`;
+    const key = `${s.vehicle_id}:${s.dealer_id}`;
     if (!latestByVin.has(key)) latestByVin.set(key, s);
   }
   const latest = Array.from(latestByVin.values());
@@ -56,7 +56,7 @@ export default function CompareClient({ dealers, snapshots }: Props) {
     for (const d of selectedDealers) {
       const ds = latest.filter((s) => s.dealer_id === d.id && s.status === "active");
       const avgPrice = ds.length ? Math.round(ds.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / ds.length) : 0;
-      const avgDays = ds.length ? Math.round(ds.reduce((sum, s) => sum + (s.days_on_lot ?? 0), 0) / ds.length) : 0;
+      const avgDays = 0; // days_on_lot not in schema — calculated from vin_presence
       rows.push([d.name, String(ds.length), String(avgPrice), String(avgDays)]);
     }
     const csv = rows.map((r) => r.join(",")).join("\n");
@@ -107,9 +107,7 @@ export default function CompareClient({ dealers, snapshots }: Props) {
               const avgPrice = ds.length
                 ? Math.round(ds.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / ds.length)
                 : 0;
-              const avgDays = ds.length
-                ? Math.round(ds.reduce((sum, s) => sum + (s.days_on_lot ?? 0), 0) / ds.length)
-                : 0;
+              const avgDays = 0;
               return (
                 <KPICard key={d.id} label={d.name} value={`${ds.length} units`} trendValue={`Avg $${avgPrice.toLocaleString()} · ${avgDays}d`} trend="neutral" />
               );

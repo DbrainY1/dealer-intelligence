@@ -24,22 +24,22 @@ export default async function DealerPage({ params }: PageProps) {
 
   const snapshotList: InventorySnapshot[] = snapshots ?? [];
 
-  // Latest snapshot per VIN
-  const latestByVin = new Map<string, InventorySnapshot>();
+  // Latest snapshot per vehicle_id
+  const latestByVehicle = new Map<number, InventorySnapshot>();
   for (const s of snapshotList) {
-    if (!latestByVin.has(s.vin)) latestByVin.set(s.vin, s);
+    if (!latestByVehicle.has(s.vehicle_id)) latestByVehicle.set(s.vehicle_id, s);
   }
-  const latest = Array.from(latestByVin.values()).filter((s) => s.status === "active");
+  const latest = Array.from(latestByVehicle.values()).filter((s) => s.status === "active");
 
-  const vins = latest.map((s) => s.vin);
-  const { data: vehicles } = vins.length
-    ? await supabase.from("vehicles").select("*").in("vin", vins)
+  const vehicleIds = latest.map((s) => s.vehicle_id);
+  const { data: vehicles } = vehicleIds.length
+    ? await supabase.from("vehicles").select("*").in("id", vehicleIds)
     : { data: [] };
   const vehicleList: Vehicle[] = vehicles ?? [];
 
   const rows = latest.map((s) => ({
     snapshot: s,
-    vehicle: vehicleList.find((v) => v.vin === s.vin),
+    vehicle: vehicleList.find((v) => v.id === s.vehicle_id),
   }));
 
   // Inventory trend last 30 days
@@ -67,7 +67,7 @@ export default async function DealerPage({ params }: PageProps) {
     .order("event_date", { ascending: false });
 
   const eventList: InventoryEvent[] = recentEvents ?? [];
-  const recentAdded = eventList.filter((e) => e.event_type === "listed");
+  const recentAdded = eventList.filter((e) => e.event_type === "added");
   const recentRemoved = eventList.filter((e) => e.event_type === "removed");
 
   return (
@@ -96,7 +96,7 @@ export default async function DealerPage({ params }: PageProps) {
           <div className="space-y-2">
             {recentAdded.slice(0, 8).map((e) => (
               <div key={e.id} className="flex justify-between text-sm">
-                <span className="font-mono text-blue-400">{e.vin}</span>
+                <span className="font-mono text-blue-400">VID-{e.vehicle_id}</span>
                 <span className="text-gray-400">{e.event_date.slice(0, 10)}</span>
               </div>
             ))}
@@ -108,7 +108,7 @@ export default async function DealerPage({ params }: PageProps) {
           <div className="space-y-2">
             {recentRemoved.slice(0, 8).map((e) => (
               <div key={e.id} className="flex justify-between text-sm">
-                <span className="font-mono text-blue-400">{e.vin}</span>
+                <span className="font-mono text-blue-400">VID-{e.vehicle_id}</span>
                 <span className="text-gray-400">{e.event_date.slice(0, 10)}</span>
               </div>
             ))}

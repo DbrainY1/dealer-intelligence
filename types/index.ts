@@ -10,11 +10,13 @@ export interface DealerGroup {
 }
 
 export interface Vehicle {
+  id: number;
   vin: string;
-  year: number;
-  make: string;
-  model: string;
-  trim: string | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  ext_color: string | null;
+  created_at: string;
 }
 
 export interface InventorySnapshot {
@@ -41,12 +43,19 @@ export interface VinPresence {
 }
 
 export interface InventoryEvent {
-  id: string;
-  vin: string;
-  dealer_id: string;
-  event_type: "listed" | "removed" | "price_change";
+  id: number;
+  vehicle_id: number;
+  dealer_id: number;
+  dealer_group_id: number | null;
+  event_type: "added" | "removed" | "price_changed";
   event_date: string;
-  price: number | null;
+  from_dealer_id: number | null;
+  old_price: number | null;
+  new_price: number | null;
+  price_at_listing: number | null;
+  last_seen_price: number | null;
+  last_seen_mileage: number | null;
+  first_seen_date: string | null;
 }
 
 export interface ScrapeLog {
