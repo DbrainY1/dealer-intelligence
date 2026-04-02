@@ -13,7 +13,7 @@ export default async function SettingsPage() {
 
   const logList: ScrapeLog[] = scrapeLogs ?? [];
 
-  const { data: dealers } = await supabase.from("dealers").select("*").neq("name", "Globul Enterprises");
+  const { data: dealers } = await supabase.from("dealers").select("*");
   const dealerMap = new Map((dealers ?? []).map((d: { id: number; name: string }) => [d.id, d.name]));
   const activeDealerIds = new Set((dealers ?? []).map((d: { id: number }) => d.id));
 

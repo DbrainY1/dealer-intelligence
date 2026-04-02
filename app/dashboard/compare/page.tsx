@@ -6,7 +6,7 @@ export default async function ComparePage() {
   const supabase = await createServerSupabase();
 
   const [{ data: dealers }, { data: snapshots }] = await Promise.all([
-    supabase.from("dealers").select("*").neq("name", "Globul Enterprises"),
+    supabase.from("dealers").select("*"),
     supabase
       .from("inventory_snapshots")
       .select("*")

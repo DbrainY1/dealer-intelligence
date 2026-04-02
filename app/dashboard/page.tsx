@@ -6,11 +6,9 @@ import MarketCharts from "./MarketCharts";
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
 
-  // Fetch dealers (exclude Globul Enterprises — no data source available)
   const { data: dealers } = await supabase
     .from("dealers")
-    .select("*")
-    .neq("name", "Globul Enterprises");
+    .select("*");
   const dealerList: Dealer[] = dealers ?? [];
 
   // Get the most recent snapshot_date per dealer, then count inventory for that date
