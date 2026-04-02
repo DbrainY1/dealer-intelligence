@@ -15,12 +15,13 @@ export default async function DashboardPage() {
   const dealerList: Dealer[] = dealers ?? [];
   const snapshotList: InventorySnapshot[] = snapshots ?? [];
 
-  // Get latest snapshot per VIN
-  const latestByVin = new Map<string, InventorySnapshot>();
+  // Get latest snapshot per vehicle_id per dealer
+  const latestByKey = new Map<string, InventorySnapshot>();
   for (const s of snapshotList) {
-    if (!latestByVin.has(s.vin)) latestByVin.set(s.vin, s);
+    const key = `${s.dealer_id}-${s.vehicle_id}`;
+    if (!latestByKey.has(key)) latestByKey.set(key, s);
   }
-  const latest = Array.from(latestByVin.values());
+  const latest = Array.from(latestByKey.values());
 
   const totalInventory = latest.filter((s) => s.status === "active").length;
   const avgPrice =

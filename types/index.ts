@@ -1,8 +1,7 @@
 export interface Dealer {
-  id: string;
+  id: number;
   name: string;
-  group_id: string | null;
-  city: string | null;
+  dealer_group_id: number | null;
 }
 
 export interface DealerGroup {
@@ -20,12 +19,18 @@ export interface Vehicle {
 
 export interface InventorySnapshot {
   id: string;
-  dealer_id: string;
-  vin: string;
-  list_price: number | null;
-  days_on_lot: number | null;
-  status: string | null;
+  dealer_id: number;
+  dealer_group_id: number | null;
+  vehicle_id: number;
   snapshot_date: string;
+  list_price: number | null;
+  mileage: number | null;
+  stock_number: string | null;
+  vehicle_url: string | null;
+  photo_count: number | null;
+  status: string | null;
+  cost_basis: number | null;
+  created_at: string;
 }
 
 export interface VinPresence {
