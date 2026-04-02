@@ -23,11 +23,13 @@ export default async function DashboardPage() {
   }
   const latest = Array.from(latestByKey.values());
 
-  const totalInventory = latest.filter((s) => s.status === "active").length;
+  // Count active or null status (HomeNet rows pre-fix had null status)
+  const activeLatest = latest.filter((s) => s.status === "active" || s.status === null);
+  const totalInventory = activeLatest.length;
   const avgPrice =
-    latest.length > 0
+    activeLatest.length > 0
       ? Math.round(
-          latest.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / latest.length
+          activeLatest.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / activeLatest.length
         )
       : 0;
 
@@ -44,7 +46,7 @@ export default async function DashboardPage() {
   // Inventory by dealer
   const byDealer = dealerList.map((d) => ({
     name: d.name,
-    count: latest.filter((s) => s.dealer_id === d.id && s.status === "active").length,
+    count: latest.filter((s) => s.dealer_id === d.id && (s.status === "active" || s.status === null)).length,
     sold: removedEvents?.filter((e: { dealer_id: string }) => e.dealer_id === d.id).length ?? 0,
   }));
 
