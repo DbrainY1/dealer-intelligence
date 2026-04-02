@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase-server";
+import NavLinks from "./NavLinks";
 
 export default async function TopNav() {
   const supabase = await createServerSupabase();
@@ -23,22 +24,7 @@ export default async function TopNav() {
         <Link href="/dashboard" className="text-blue-400 font-bold text-lg tracking-tight">
           DealerIQ
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
-            Overview
-          </Link>
-          <Link href="/dashboard/competitors" className="text-gray-300 hover:text-white transition-colors">
-            Competitors
-          </Link>
-          <Link href="/dashboard/compare" className="text-gray-300 hover:text-white transition-colors">
-            Compare
-          </Link>
-          {role === "developer" && (
-            <Link href="/dashboard/settings" className="text-gray-300 hover:text-white transition-colors">
-              Settings
-            </Link>
-          )}
-        </nav>
+        <NavLinks role={role} />
       </div>
       {user && (
         <div className="flex items-center gap-2">
