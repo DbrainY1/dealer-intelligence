@@ -9,6 +9,15 @@ export default async function DashboardPage() {
   const { data: dealers } = await supabase.from("dealers").select("*");
   const dealerList: Dealer[] = dealers ?? [];
 
+  // Monthly sold counts from monthly_sales table
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  const { data: monthlySales } = await supabase
+    .from("monthly_sales")
+    .select("dealer_id, units_sold")
+    .eq("month_start", monthStart.toISOString().split("T")[0]);
+  const soldByDealer = new Map((monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [r.dealer_id, r.units_sold ?? 0]));
+
   // Per-dealer: get latest snapshot date, then count for that date
   const byDealer = await Promise.all(
     dealerList.map(async (d) => {
@@ -20,7 +29,7 @@ export default async function DashboardPage() {
         .limit(1)
         .single();
 
-      if (!latestDate) return { name: d.name, count: 0, sold: 0 };
+      if (!latestDate) return { name: d.name, count: 0, sold: soldByDealer.get(d.id) ?? 0 };
 
       const { count } = await supabase
         .from("inventory_snapshots")
@@ -28,7 +37,7 @@ export default async function DashboardPage() {
         .eq("dealer_id", d.id)
         .eq("snapshot_date", latestDate.snapshot_date);
 
-      return { name: d.name, count: count ?? 0, sold: 0 };
+      return { name: d.name, count: count ?? 0, sold: soldByDealer.get(d.id) ?? 0 };
     })
   );
 
@@ -61,14 +70,8 @@ export default async function DashboardPage() {
   );
   const avgPrice = totalPriceCount > 0 ? Math.round(totalPriceSum / totalPriceCount) : 0;
 
-  // Units sold this month from monthly_sales table
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  const { data: monthlySalesData } = await supabase
-    .from("monthly_sales")
-    .select("units_sold")
-    .eq("month_start", monthStart.toISOString().split("T")[0]);
-  const estimatedSold = (monthlySalesData ?? []).reduce((sum, r) => sum + (r.units_sold ?? 0), 0);
+  // Total units sold this month (sum across all dealers)
+  const estimatedSold = Array.from(soldByDealer.values()).reduce((sum, v) => sum + v, 0);
 
   return (
     <div className="p-6 space-y-6">
