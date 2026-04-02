@@ -13,14 +13,16 @@ export default async function SettingsPage() {
 
   const logList: ScrapeLog[] = scrapeLogs ?? [];
 
-  // Latest per dealer
+  const { data: dealers } = await supabase.from("dealers").select("*").neq("name", "Globul Enterprises");
+  const dealerMap = new Map((dealers ?? []).map((d: { id: number; name: string }) => [d.id, d.name]));
+  const activeDealerIds = new Set((dealers ?? []).map((d: { id: number }) => d.id));
+
+  // Latest per dealer — exclude Globul
   const latestPerDealer = new Map<number, ScrapeLog>();
   for (const log of logList) {
-    if (!latestPerDealer.has(log.dealer_id)) latestPerDealer.set(log.dealer_id, log);
+    if (!latestPerDealer.has(log.dealer_id) && activeDealerIds.has(log.dealer_id))
+      latestPerDealer.set(log.dealer_id, log);
   }
-
-  const { data: dealers } = await supabase.from("dealers").select("*");
-  const dealerMap = new Map((dealers ?? []).map((d: { id: number; name: string }) => [d.id, d.name]));
 
   return (
     <RoleGuard roles={["developer"]}>

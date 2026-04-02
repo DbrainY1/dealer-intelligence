@@ -55,7 +55,8 @@ export default function CompareClient({ dealers, snapshots }: Props) {
     const rows = [["Dealer", "In Stock", "Avg Price", "Avg Days on Lot"]];
     for (const d of selectedDealers) {
       const ds = latest.filter((s) => s.dealer_id === d.id && s.status === "active");
-      const avgPrice = ds.length ? Math.round(ds.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / ds.length) : 0;
+      const pricedDs = ds.filter((s) => s.list_price != null);
+      const avgPrice = pricedDs.length ? Math.round(pricedDs.reduce((sum, s) => sum + s.list_price!, 0) / pricedDs.length) : 0;
       const avgDays = 0; // days_on_lot not in schema — calculated from vin_presence
       rows.push([d.name, String(ds.length), String(avgPrice), String(avgDays)]);
     }
@@ -104,8 +105,9 @@ export default function CompareClient({ dealers, snapshots }: Props) {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {selectedDealers.map((d) => {
               const ds = latest.filter((s) => s.dealer_id === d.id && s.status === "active");
-              const avgPrice = ds.length
-                ? Math.round(ds.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / ds.length)
+              const priced = ds.filter((s) => s.list_price != null);
+              const avgPrice = priced.length
+                ? Math.round(priced.reduce((sum, s) => sum + (s.list_price!), 0) / priced.length)
                 : 0;
               const avgDays = 0;
               return (
