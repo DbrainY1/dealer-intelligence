@@ -18,9 +18,10 @@ const COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#f97316", "#a855f7", "#ef4444"
 interface Props {
   dealers: Dealer[];
   snapshots: InventorySnapshot[];
+  trendSnapshots?: InventorySnapshot[];
 }
 
-export default function CompareClient({ dealers, snapshots }: Props) {
+export default function CompareClient({ dealers, snapshots, trendSnapshots }: Props) {
   const [selected, setSelected] = useState<number[]>([]);
 
   const toggleDealer = (id: number) =>
@@ -35,15 +36,16 @@ export default function CompareClient({ dealers, snapshots }: Props) {
   }
   const latest = Array.from(latestByVin.values());
 
-  // Trend data
+  // Trend data — use trendSnapshots if provided, else fall back to snapshots
+  const trendSource = trendSnapshots ?? snapshots;
   const dateSet = new Set<string>();
-  for (const s of snapshots) dateSet.add(s.snapshot_date.slice(0, 10));
+  for (const s of trendSource) dateSet.add(s.snapshot_date.slice(0, 10));
   const dates = Array.from(dateSet).sort().slice(-30);
 
   const trendData = dates.map((date) => {
     const row: Record<string, string | number> = { date };
     for (const d of selectedDealers) {
-      row[d.name] = snapshots.filter(
+      row[d.name] = trendSource.filter(
         (s) => s.dealer_id === d.id && s.snapshot_date.slice(0, 10) === date && s.status === "active"
       ).length;
     }
