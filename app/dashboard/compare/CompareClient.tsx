@@ -114,7 +114,7 @@ export default function CompareClient({ dealers, snapshots, trendSnapshots }: Pr
                 <div key={d.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
                   <p className="text-gray-400 text-sm mb-2">{d.name}</p>
                   <p className="text-white text-xl font-bold">{ds.length} units</p>
-                  <p className="text-white text-base font-semibold mt-2">{total > 0 ? `$${total.toLocaleString()}` : "—"}</p>
+                  <p className="text-gray-400 text-xs mt-2">Total: {total > 0 ? `$${total.toLocaleString()}` : "—"}</p>
                   <p className="text-gray-400 text-xs mt-1">Avg: {avgPrice > 0 ? `$${avgPrice.toLocaleString()}` : "—"}</p>
                 </div>
               );
