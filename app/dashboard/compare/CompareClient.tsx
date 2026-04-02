@@ -76,33 +76,31 @@ export default function CompareClient({ dealers, snapshots, trendSnapshots }: Pr
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-white text-xl font-bold">Comparison Tool</h1>
-        <button
-          onClick={exportCsv}
-          disabled={selectedDealers.length === 0}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm rounded transition-colors"
-        >
-          Export CSV
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setSelected(dealers.map((d) => d.id))}
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors"
+          >
+            Select All
+          </button>
+          <button
+            onClick={() => setSelected([])}
+            disabled={selected.length === 0}
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-sm rounded transition-colors"
+          >
+            Clear All
+          </button>
+          <button
+            onClick={exportCsv}
+            disabled={selectedDealers.length === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm rounded transition-colors"
+          >
+            Export CSV
+          </button>
+        </div>
       </div>
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-gray-400 text-sm">Select dealers to compare:</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setSelected(dealers.map((d) => d.id))}
-              className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-            >
-              Select All
-            </button>
-            <button
-              onClick={() => setSelected([])}
-              disabled={selected.length === 0}
-              className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded transition-colors"
-            >
-              Clear All
-            </button>
-          </div>
-        </div>
+        <p className="text-gray-400 text-sm mb-3">Select dealers to compare:</p>
         <div className="flex flex-wrap gap-2">
           {dealers.map((d) => (
             <button
