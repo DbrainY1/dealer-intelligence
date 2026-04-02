@@ -14,22 +14,22 @@ interface Dealer {
 
 const DEALERS: Dealer[] = [
   // Baja Auto Group — tracked (own)
-  { name: "Baja East", lat: 36.1701, lng: -115.1088, tracked: true, group: "Baja Auto Group", address: "3333 E Fremont St, Las Vegas, NV 89104", website: "https://www.bajaautos.com" },
-  { name: "Baja West", lat: 36.1647, lng: -115.1970, tracked: true, group: "Baja Auto Group", address: "824 S Decatur Blvd, Las Vegas, NV 89107", website: "https://www.bajaautos.com" },
-  { name: "Newport Motors", lat: 36.1448, lng: -115.1222, tracked: true, group: "Baja Auto Group", address: "2711 E Sahara Ave, Las Vegas, NV 89104", website: "https://www.bajaautos.com" },
+  { name: "Baja East", lat: 36.1470, lng: -115.1023, tracked: true, group: "Baja Auto Group", address: "3333 E Fremont St, Las Vegas, NV 89104", website: "https://www.bajaautos.com" },
+  { name: "Baja West", lat: 36.1614, lng: -115.2066, tracked: true, group: "Baja Auto Group", address: "824 S Decatur Blvd, Las Vegas, NV 89107", website: "https://www.bajaautos.com" },
+  { name: "Newport Motors", lat: 36.1456, lng: -115.1014, tracked: true, group: "Baja Auto Group", address: "2711 E Sahara Ave, Las Vegas, NV 89104", website: "https://www.bajaautos.com" },
 
   // Ariana Auto Group — tracked (competitor)
-  { name: "Ariana Motors", lat: 36.1763, lng: -115.0792, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110", website: "https://www.arianamotorslv.com" },
-  { name: "Ariana Motors Nellis", lat: 36.1680, lng: -115.0801, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110", website: "https://www.arianamotorsnellis.com" },
-  { name: "One Motors LV", lat: 36.1056, lng: -115.0642, tracked: true, group: "Ariana Auto Group", address: "3535 Boulder Hwy, Las Vegas, NV 89121", website: "https://www.onemotorslv.com" },
+  { name: "Ariana Motors", lat: 36.1835, lng: -115.0623, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110", website: "https://www.arianamotorslv.com" },
+  { name: "Ariana Motors Nellis", lat: 36.1835, lng: -115.0625, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110", website: "https://www.arianamotorsnellis.com" },
+  { name: "One Motors LV", lat: 36.1421, lng: -115.0977, tracked: true, group: "Ariana Auto Group", address: "3535 Boulder Hwy, Las Vegas, NV 89121", website: "https://www.onemotorslv.com" },
 
   // Tracked competitors
-  { name: "Boktors", lat: 36.0991, lng: -115.1341, tracked: true, address: "1610 E Tropicana Ave, Las Vegas, NV 89119", website: "https://www.boktors.com" },
-  { name: "Globul Enterprises", lat: 36.1046, lng: -115.1864, tracked: true, address: "3720 S Valley View Blvd, Las Vegas, NV 89103", website: "https://www.globulenterprises.com" },
-  { name: "Platinum Cars LV", lat: 36.0998, lng: -115.0703, tracked: true, address: "3497 Boulder Hwy, Las Vegas, NV 89121", website: "https://www.platinumcarslv.com" },
-  { name: "Queen Motorcars", lat: 36.1567, lng: -115.1148, tracked: true, address: "2925 E Fremont St, Las Vegas, NV 89104", website: "https://www.queenmotorcars.com" },
-  { name: "Auto Vision LV", lat: 36.1542, lng: -115.1178, tracked: true, address: "3020 E Fremont St, Las Vegas, NV 89104", website: "https://www.autovisionlv.com" },
-  { name: "Charlie Cheap Car", lat: 36.1479, lng: -115.2198, tracked: true, address: "5015 W Sahara Ave #127, Las Vegas, NV 89146", website: "https://www.charliecheapcar.com" },
+  { name: "Boktors", lat: 36.1015, lng: -115.1305, tracked: true, address: "1610 E Tropicana Ave, Las Vegas, NV 89119", website: "https://www.boktors.com" },
+  { name: "Globul Enterprises", lat: 36.1301, lng: -115.1902, tracked: true, address: "3720 S Valley View Blvd, Las Vegas, NV 89103", website: "https://www.globulenterprises.com" },
+  { name: "Platinum Cars LV", lat: 36.1427, lng: -115.0984, tracked: true, address: "3497 Boulder Hwy, Las Vegas, NV 89121", website: "https://www.platinumcarslv.com" },
+  { name: "Queen Motorcars", lat: 36.1542, lng: -115.1106, tracked: true, address: "2925 E Fremont St, Las Vegas, NV 89104", website: "https://www.queenmotorcars.com" },
+  { name: "Auto Vision LV", lat: 36.1535, lng: -115.1097, tracked: true, address: "3020 E Fremont St, Las Vegas, NV 89104", website: "https://www.autovisionlv.com" },
+  { name: "Charlie Cheap Car", lat: 36.1447, lng: -115.2086, tracked: true, address: "5015 W Sahara Ave #127, Las Vegas, NV 89146", website: "https://www.charliecheapcar.com" },
 ];
 
 export default function LocationsMap() {
