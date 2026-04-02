@@ -6,15 +6,12 @@ import MarketCharts from "./MarketCharts";
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
 
-  const { data: dealers } = await supabase
-    .from("dealers")
-    .select("*");
+  const { data: dealers } = await supabase.from("dealers").select("*");
   const dealerList: Dealer[] = dealers ?? [];
 
-  // Get the most recent snapshot_date per dealer, then count inventory for that date
+  // Per-dealer: get latest snapshot date, then count for that date
   const byDealer = await Promise.all(
     dealerList.map(async (d) => {
-      // Find most recent date for this dealer
       const { data: latestDate } = await supabase
         .from("inventory_snapshots")
         .select("snapshot_date")
@@ -25,7 +22,6 @@ export default async function DashboardPage() {
 
       if (!latestDate) return { name: d.name, count: 0, sold: 0 };
 
-      // Count distinct vehicle_id for that date
       const { count } = await supabase
         .from("inventory_snapshots")
         .select("id", { count: "exact" })
@@ -38,26 +34,32 @@ export default async function DashboardPage() {
 
   const totalInventory = byDealer.reduce((sum, d) => sum + d.count, 0);
 
-  // Avg list price — from most recent snapshots across all dealers
-  const { data: priceData } = await supabase
-    .from("inventory_snapshots")
-    .select("list_price, snapshot_date")
-    .order("snapshot_date", { ascending: false })
-    .limit(1000);
-
-  // Keep only latest snapshot per vehicle+dealer combo
-  const seenKeys = new Set<string>();
-  const latestPrices: number[] = [];
-  for (const row of priceData ?? []) {
-    // Use snapshot_date as a proxy — just take all from the most recent batch
-    if (row.list_price) latestPrices.push(row.list_price);
-    if (seenKeys.size === 0) seenKeys.add(row.snapshot_date);
-    else if (!seenKeys.has(row.snapshot_date)) break; // stop when date changes
-  }
-  const avgPrice =
-    latestPrices.length > 0
-      ? Math.round(latestPrices.reduce((s, p) => s + p, 0) / latestPrices.length)
-      : 0;
+  // Avg price: per dealer from latest snapshot, exclude nulls
+  let totalPriceSum = 0;
+  let totalPriceCount = 0;
+  await Promise.all(
+    dealerList.map(async (d) => {
+      const { data: latest } = await supabase
+        .from("inventory_snapshots")
+        .select("snapshot_date")
+        .eq("dealer_id", d.id)
+        .order("snapshot_date", { ascending: false })
+        .limit(1)
+        .single();
+      if (!latest) return;
+      const { data: snaps } = await supabase
+        .from("inventory_snapshots")
+        .select("list_price")
+        .eq("dealer_id", d.id)
+        .eq("snapshot_date", latest.snapshot_date)
+        .not("list_price", "is", null);
+      for (const s of snaps ?? []) {
+        totalPriceSum += s.list_price ?? 0;
+        totalPriceCount++;
+      }
+    })
+  );
+  const avgPrice = totalPriceCount > 0 ? Math.round(totalPriceSum / totalPriceCount) : 0;
 
   // Estimated units sold = inventory_events removed last 30 days
   const thirtyDaysAgo = new Date();

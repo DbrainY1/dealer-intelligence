@@ -13,51 +13,72 @@ export default async function CompetitorsPage() {
   const dealers: Dealer[] = (allDealers ?? []).filter((d: Dealer) =>
     COMPETITOR_NAMES.some((n) => d.name.toLowerCase().includes(n.toLowerCase()))
   );
-  const dealerIds = dealers.map((d) => d.id);
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const [{ data: snapshots }, { data: recentEvents }] = await Promise.all([
-    supabase
-      .from("inventory_snapshots")
-      .select("*")
-      .in("dealer_id", dealerIds)
-      .gte("snapshot_date", ninetyDaysAgo.toISOString())
-      .order("snapshot_date", { ascending: true }),
-    supabase
-      .from("inventory_events")
-      .select("*")
-      .in("dealer_id", dealerIds)
-      .eq("event_type", "added")
-      .gte("event_date", sevenDaysAgo.toISOString())
-      .order("event_date", { ascending: false }),
-  ]);
+  // Query each dealer separately to avoid 1000-row Supabase limit
+  const allSnapshots: InventorySnapshot[] = [];
+  await Promise.all(
+    dealers.map(async (d) => {
+      const { data } = await supabase
+        .from("inventory_snapshots")
+        .select("*")
+        .eq("dealer_id", d.id)
+        .gte("snapshot_date", ninetyDaysAgo.toISOString().split("T")[0])
+        .order("snapshot_date", { ascending: true });
+      if (data) allSnapshots.push(...(data as InventorySnapshot[]));
+    })
+  );
 
-  const snapshotList: InventorySnapshot[] = snapshots ?? [];
+  const dealerIds = dealers.map((d) => d.id);
+  const { data: recentEvents } = await supabase
+    .from("inventory_events")
+    .select("*")
+    .in("dealer_id", dealerIds)
+    .eq("event_type", "added")
+    .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
+    .order("event_date", { ascending: false });
+
   const eventList: InventoryEvent[] = recentEvents ?? [];
 
-  // Avg list price per competitor
-  const kpis = dealers.map((d) => {
-    const ds = snapshotList.filter((s) => s.dealer_id === d.id);
-    const priced = ds.filter((s) => s.list_price != null);
+  // Avg list price per competitor — latest snapshot date only, exclude nulls
+  const kpis = await Promise.all(dealers.map(async (d) => {
+    const { data: latest } = await supabase
+      .from("inventory_snapshots")
+      .select("snapshot_date")
+      .eq("dealer_id", d.id)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!latest) return { dealer: d, avg: 0 };
+
+    const { data: snaps } = await supabase
+      .from("inventory_snapshots")
+      .select("list_price")
+      .eq("dealer_id", d.id)
+      .eq("snapshot_date", latest.snapshot_date)
+      .not("list_price", "is", null);
+
+    const priced = snaps ?? [];
     const avg = priced.length
       ? Math.round(priced.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / priced.length)
       : 0;
     return { dealer: d, avg };
-  });
+  }));
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-white text-xl font-bold">Competitor Intel</h1>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(({ dealer, avg }) => (
-          <KPICard key={dealer.id} label={`${dealer.name} Avg Price`} value={`$${avg.toLocaleString()}`} trend="neutral" />
+          <KPICard key={dealer.id} label={`${dealer.name} Avg Price`} value={avg > 0 ? `$${avg.toLocaleString()}` : "—"} trend="neutral" />
         ))}
       </div>
-      <CompetitorCharts dealers={dealers} snapshots={snapshotList} />
+      <CompetitorCharts dealers={dealers} snapshots={allSnapshots} />
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-white font-semibold mb-4">New Listings (Last 7 Days)</h2>
         <table className="w-full text-sm text-left text-gray-300">
@@ -72,7 +93,7 @@ export default async function CompetitorsPage() {
           <tbody>
             {eventList.slice(0, 20).map((e) => (
               <tr key={e.id} className="border-b border-gray-800">
-                <td className="px-4 py-3 font-mono text-amber-400">VIN-{e.vehicle_id}</td>
+                <td className="px-4 py-3 font-mono text-amber-400">VID-{e.vehicle_id}</td>
                 <td className="px-4 py-3">{dealers.find((d) => d.id === e.dealer_id)?.name ?? `Dealer ${e.dealer_id}`}</td>
                 <td className="px-4 py-3">{e.event_date.slice(0, 10)}</td>
                 <td className="px-4 py-3">{e.price_at_listing != null ? `$${e.price_at_listing.toLocaleString()}` : "—"}</td>
