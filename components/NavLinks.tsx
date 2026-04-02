@@ -6,6 +6,7 @@ const links = [
   { href: "/dashboard", label: "Overview", exact: true },
   { href: "/dashboard/competitors", label: "Competitors" },
   { href: "/dashboard/compare", label: "Compare" },
+  { href: "/dashboard/locations", label: "Locations" },
 ];
 
 export default function NavLinks({ role }: { role: string | null }) {
