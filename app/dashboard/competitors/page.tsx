@@ -75,8 +75,8 @@ export default async function CompetitorsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(({ dealer, avg, total }) => (
           <div key={dealer.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <p className="text-gray-400 text-sm mb-2">{dealer.name}</p>
-            <p className="text-gray-400 text-xs mt-1">Total: {(total ?? 0) > 0 ? `$${(total ?? 0).toLocaleString()}` : "—"}</p>
+            <p className="text-white font-bold text-lg mb-2">{dealer.name}</p>
+            <p className="text-gray-400 text-xs">Total: {(total ?? 0) > 0 ? `$${(total ?? 0).toLocaleString()}` : "—"}</p>
             <p className="text-gray-400 text-xs mt-1">Avg: {avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
           </div>
         ))}
