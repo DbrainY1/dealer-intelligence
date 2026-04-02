@@ -61,14 +61,14 @@ export default async function DashboardPage() {
   );
   const avgPrice = totalPriceCount > 0 ? Math.round(totalPriceSum / totalPriceCount) : 0;
 
-  // Estimated units sold = inventory_events removed last 30 days
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const { count: estimatedSold } = await supabase
-    .from("inventory_events")
-    .select("id", { count: "exact" })
-    .eq("event_type", "removed")
-    .gte("event_date", thirtyDaysAgo.toISOString().split("T")[0]);
+  // Units sold this month from monthly_sales table
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  const { data: monthlySalesData } = await supabase
+    .from("monthly_sales")
+    .select("units_sold")
+    .eq("month_start", monthStart.toISOString().split("T")[0]);
+  const estimatedSold = (monthlySalesData ?? []).reduce((sum, r) => sum + (r.units_sold ?? 0), 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KPICard label="Total Market Inventory" value={totalInventory.toLocaleString()} trend="neutral" />
         <KPICard label="Avg List Price" value={`$${avgPrice.toLocaleString()}`} trend="neutral" />
-        <KPICard label="Est. Units Sold (30d)" value={(estimatedSold ?? 0).toLocaleString()} trend="up" trendValue="Last 30 days" />
+        <KPICard label="Units Sold (This Month)" value={estimatedSold.toLocaleString()} trend="up" trendValue="Current month" />
       </div>
       <MarketCharts byDealer={byDealer} dealers={dealerList} />
     </div>
