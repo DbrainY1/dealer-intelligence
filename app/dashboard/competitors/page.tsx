@@ -4,7 +4,7 @@ import RoleGuard from "@/components/RoleGuard";
 import CompetitorCharts from "./CompetitorCharts";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
-const COMPETITOR_NAMES = ["Ariana", "Auto Vision", "Boktors", "Charlie", "Globul", "One Motors", "Platinum", "Queen", "Nellis"];
+const COMPETITOR_NAMES = ["Ariana", "Auto Vision", "Boktors", "Charlie", "Globul", "Hot Deals", "One Motors", "Platinum", "Queen", "Nellis"];
 
 export default async function CompetitorsPage() {
   const supabase = await createServerSupabase();
