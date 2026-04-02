@@ -64,18 +64,21 @@ export default async function CompetitorsPage() {
       .not("list_price", "is", null);
 
     const priced = snaps ?? [];
-    const avg = priced.length
-      ? Math.round(priced.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / priced.length)
-      : 0;
-    return { dealer: d, avg };
+    const total = Math.round(priced.reduce((sum, s) => sum + (s.list_price ?? 0), 0));
+    const avg = priced.length ? Math.round(total / priced.length) : 0;
+    return { dealer: d, avg, total };
   }));
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-white text-xl font-bold">Competitor Intel</h1>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map(({ dealer, avg }) => (
-          <KPICard key={dealer.id} label={`${dealer.name} Avg Price`} value={avg > 0 ? `$${avg.toLocaleString()}` : "—"} trend="neutral" />
+        {kpis.map(({ dealer, avg, total }) => (
+          <div key={dealer.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <p className="text-gray-400 text-sm mb-2">{dealer.name}</p>
+            <p className="text-white text-lg font-bold">{(total ?? 0) > 0 ? `$${(total ?? 0).toLocaleString()}` : "—"}</p>
+            <p className="text-gray-400 text-xs mt-1">Avg: {avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
+          </div>
         ))}
       </div>
       <CompetitorCharts dealers={dealers} snapshots={allSnapshots} />
