@@ -10,7 +10,7 @@ export default async function ComparePage() {
     supabase
       .from("inventory_snapshots")
       .select("*")
-      .order("snapshot_date", { ascending: true }),
+      .order("snapshot_date", { ascending: false }),
   ]);
 
   return (
