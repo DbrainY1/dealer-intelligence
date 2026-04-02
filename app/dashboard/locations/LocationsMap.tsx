@@ -29,7 +29,7 @@ const DEALERS: Dealer[] = [
   { name: "Platinum Cars LV", lat: 36.0998, lng: -115.0703, tracked: true, address: "3497 Boulder Hwy, Las Vegas, NV 89121", website: "https://www.platinumcarslv.com" },
   { name: "Queen Motorcars", lat: 36.1567, lng: -115.1148, tracked: true, address: "2925 E Fremont St, Las Vegas, NV 89104", website: "https://www.queenmotorcars.com" },
   { name: "Auto Vision LV", lat: 36.1542, lng: -115.1178, tracked: true, address: "3020 E Fremont St, Las Vegas, NV 89104", website: "https://www.autovisionlv.com" },
-  { name: "Charlie Cheap Car", lat: 36.1448, lng: -115.1640, tracked: true, address: "Las Vegas, NV", website: "https://www.charliecheapcar.com" },
+  { name: "Charlie Cheap Car", lat: 36.1479, lng: -115.2198, tracked: true, address: "5015 W Sahara Ave #127, Las Vegas, NV 89146", website: "https://www.charliecheapcar.com" },
 ];
 
 export default function LocationsMap() {
