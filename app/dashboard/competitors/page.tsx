@@ -31,7 +31,7 @@ export default async function CompetitorsPage() {
       .from("inventory_events")
       .select("*")
       .in("dealer_id", dealerIds)
-      .eq("event_type", "listed")
+      .eq("event_type", "added")
       .gte("event_date", sevenDaysAgo.toISOString())
       .order("event_date", { ascending: false }),
   ]);

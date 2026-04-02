@@ -59,11 +59,13 @@ export interface InventoryEvent {
 }
 
 export interface ScrapeLog {
-  id: string;
-  dealer_id: string;
+  id: number;
+  dealer_id: number;
   run_at: string;
-  success: boolean;
-  error_message: string | null;
+  vehicles_found: number | null;
+  new_vehicles: number | null;
+  status: "success" | "error";
+  error_msg: string | null;
 }
 
 export interface UserRole {

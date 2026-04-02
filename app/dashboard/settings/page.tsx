@@ -6,7 +6,7 @@ export default async function SettingsPage() {
   const supabase = await createServerSupabase();
 
   const { data: scrapeLogs } = await supabase
-    .from("scrape_logs")
+    .from("scrape_log")
     .select("*")
     .order("run_at", { ascending: false })
     .limit(50);
@@ -14,13 +14,13 @@ export default async function SettingsPage() {
   const logList: ScrapeLog[] = scrapeLogs ?? [];
 
   // Latest per dealer
-  const latestPerDealer = new Map<string, ScrapeLog>();
+  const latestPerDealer = new Map<number, ScrapeLog>();
   for (const log of logList) {
     if (!latestPerDealer.has(log.dealer_id)) latestPerDealer.set(log.dealer_id, log);
   }
 
   const { data: dealers } = await supabase.from("dealers").select("*");
-  const dealerMap = new Map((dealers ?? []).map((d: { id: string; name: string }) => [d.id, d.name]));
+  const dealerMap = new Map((dealers ?? []).map((d: { id: number; name: string }) => [d.id, d.name]));
 
   return (
     <RoleGuard roles={["developer"]}>
@@ -43,11 +43,11 @@ export default async function SettingsPage() {
                   <td className="px-4 py-3">{dealerMap.get(log.dealer_id) ?? log.dealer_id}</td>
                   <td className="px-4 py-3">{log.run_at.slice(0, 16).replace("T", " ")}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs ${log.success ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}>
-                      {log.success ? "OK" : "FAIL"}
+                    <span className={`px-2 py-0.5 rounded text-xs ${log.status === "success" ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}>
+                      {log.status === "success" ? "OK" : "FAIL"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-red-400 text-xs">{log.error_message ?? "—"}</td>
+                  <td className="px-4 py-3 text-red-400 text-xs">{log.error_msg ?? "—"}</td>
                 </tr>
               ))}
               {latestPerDealer.size === 0 && (
