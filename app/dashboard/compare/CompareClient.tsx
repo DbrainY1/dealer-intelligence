@@ -108,12 +108,15 @@ export default function CompareClient({ dealers, snapshots, trendSnapshots }: Pr
             {selectedDealers.map((d) => {
               const ds = latest.filter((s) => s.dealer_id === d.id && s.status === "active");
               const priced = ds.filter((s) => s.list_price != null);
-              const avgPrice = priced.length
-                ? Math.round(priced.reduce((sum, s) => sum + (s.list_price!), 0) / priced.length)
-                : 0;
-              const avgDays = 0;
+              const total = Math.round(priced.reduce((sum, s) => sum + s.list_price!, 0));
+              const avgPrice = priced.length ? Math.round(total / priced.length) : 0;
               return (
-                <KPICard key={d.id} label={d.name} value={`${ds.length} units`} trendValue={`Avg $${avgPrice.toLocaleString()} · ${avgDays}d`} trend="neutral" />
+                <div key={d.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                  <p className="text-gray-400 text-sm mb-2">{d.name}</p>
+                  <p className="text-white text-xl font-bold">{ds.length} units</p>
+                  <p className="text-white text-base font-semibold mt-2">{total > 0 ? `$${total.toLocaleString()}` : "—"}</p>
+                  <p className="text-gray-400 text-xs mt-1">Avg: {avgPrice > 0 ? `$${avgPrice.toLocaleString()}` : "—"}</p>
+                </div>
               );
             })}
           </div>
