@@ -115,32 +115,32 @@ export default async function CompetitorsPage() {
             {/* Dealer name */}
             <p className="text-white font-bold text-base truncate">{dealer.name}</p>
 
-            {/* Inventory count — big stat */}
-            <div>
-              <p className="text-3xl font-bold text-blue-400">{count.toLocaleString()}</p>
-              <p className="text-gray-500 text-xs">vehicles in stock</p>
-            </div>
-
-            {/* Avg price + MTD sold */}
-            <div className="flex justify-between text-sm">
+            {/* Inventory count + MTD Sold side by side — big stats */}
+            <div className="flex justify-between items-end">
               <div>
-                <p className="text-gray-400 text-xs">Avg Price</p>
-                <p className="text-white font-semibold">{avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
+                <p className="text-3xl font-bold text-blue-400">{count.toLocaleString()}</p>
+                <p className="text-gray-500 text-xs">in stock</p>
               </div>
               <div className="text-right">
-                <p className="text-gray-400 text-xs">MTD Sold</p>
-                <p className="text-white font-semibold">{sold}</p>
+                <p className="text-3xl font-bold text-green-400">{sold}</p>
+                <p className="text-gray-500 text-xs">MTD sold</p>
               </div>
+            </div>
+
+            {/* Avg price */}
+            <div>
+              <p className="text-gray-400 text-xs">Avg Price</p>
+              <p className="text-white font-semibold">{avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
             </div>
 
             {/* Weekly activity */}
             <div className="flex justify-between border-t border-gray-800 pt-3 text-sm">
               <div className="flex items-center gap-1">
-                <span className="text-green-400 font-bold">↑ {added}</span>
+                <span className="text-green-300 font-semibold">↑ {added}</span>
                 <span className="text-gray-500 text-xs">added</span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-red-400 font-bold">↓ {removed}</span>
+                <span className="text-red-300 font-semibold">↓ {removed}</span>
                 <span className="text-gray-500 text-xs">removed</span>
               </div>
               <p className="text-gray-600 text-xs self-end">this week</p>
