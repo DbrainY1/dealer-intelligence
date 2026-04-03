@@ -40,7 +40,7 @@ export default async function CompetitorsPage() {
   // Weekly adds and removes
   const { data: weeklyAdds } = await supabase
     .from("inventory_events")
-    .select("dealer_id, vehicle_id, event_date, price_at_listing")
+    .select("*")
     .in("dealer_id", dealerIds)
     .eq("event_type", "added")
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
