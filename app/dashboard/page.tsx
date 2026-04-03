@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { createServerSupabase } from "@/lib/supabase-server";
 import KPICard from "@/components/KPICard";
 import type { Dealer } from "@/types";
