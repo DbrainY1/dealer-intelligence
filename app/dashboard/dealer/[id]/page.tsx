@@ -18,7 +18,12 @@ function fmtN(n: number) {
 
 export default async function DealerPage({ params }: PageProps) {
   const dealerId = params.id;
-  const db = createDataSupabase();
+  // Direct client with explicit env vars — avoids silent failure if vars undefined
+  const { createClient } = await import("@supabase/supabase-js");
+  const db = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://jrgavepbhlrltfadeuke.supabase.co",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyZ2F2ZXBiaGxybHRmYWRldWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5Njg5NDgsImV4cCI6MjA5MDU0NDk0OH0.It2KkRiTmtZJfPKSEBAvLmsA8aM3WgWhtGUd2smS2nk"
+  );
 
   const { data: dealer } = await db
     .from("dealers")
