@@ -16,12 +16,12 @@ type SortKey = "year" | "make" | "model" | "mileage" | "price" | "date";
 type SortDir = "asc" | "desc";
 
 const COL_HEADERS: { key: SortKey; label: string; align: string }[] = [
+  { key: "date",    label: "Date",    align: "text-left" },
   { key: "year",    label: "Year",    align: "text-left" },
   { key: "make",    label: "Make",    align: "text-left" },
   { key: "model",   label: "Model",   align: "text-left" },
   { key: "mileage", label: "Miles",   align: "text-right" },
   { key: "price",   label: "Price",   align: "text-right" },
-  { key: "date",    label: "Date",    align: "text-right" },
 ];
 
 export default function VehicleEventList({
@@ -82,6 +82,7 @@ export default function VehicleEventList({
         <tbody className="divide-y divide-gray-800/40">
           {sorted.map((e, i) => (
             <tr key={i} className="hover:bg-gray-800/30">
+              <td className="py-2 pr-3 text-gray-400 whitespace-nowrap">{e.event_date?.slice(0, 10)}</td>
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.year ?? "—"}</td>
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.make ?? "—"}</td>
               <td className="py-2 pr-3 text-gray-300 whitespace-nowrap">
@@ -94,11 +95,8 @@ export default function VehicleEventList({
                   {e.mileage ? e.mileage.toLocaleString() : "—"}
                 </td>
               )}
-              <td className={`py-2 pr-3 text-right whitespace-nowrap ${priceColor}`}>
+              <td className={`py-2 text-right whitespace-nowrap ${priceColor}`}>
                 {e.price ? `$${Math.round(e.price).toLocaleString()}` : "—"}
-              </td>
-              <td className="py-2 text-right text-gray-400 whitespace-nowrap">
-                {e.event_date?.slice(0, 10)}
               </td>
             </tr>
           ))}
