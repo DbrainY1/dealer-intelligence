@@ -23,6 +23,7 @@ const COL_HEADERS: { key: SortKey; label: string; align: string }[] = [
   { key: "mileage", label: "Miles",   align: "text-right" },
   { key: "price",   label: "Price",   align: "text-right" },
 ];
+// VIN is always shown but not sortable
 
 export default function VehicleEventList({
   events,
@@ -77,6 +78,7 @@ export default function VehicleEventList({
                 {col.label}{arrow(col.key)}
               </th>
             ))}
+            <th className="pb-2 text-right whitespace-nowrap text-gray-600">VIN</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-800/40">
@@ -91,8 +93,11 @@ export default function VehicleEventList({
                   {e.mileage ? e.mileage.toLocaleString() : "—"}
                 </td>
               )}
-              <td className={`py-2 text-right whitespace-nowrap ${priceColor}`}>
+              <td className={`py-2 pr-3 text-right whitespace-nowrap ${priceColor}`}>
                 {e.price ? `$${Math.round(e.price).toLocaleString()}` : "—"}
+              </td>
+              <td className="py-2 text-right font-mono text-gray-600 whitespace-nowrap" style={{fontSize: "0.65rem"}}>
+                {e.vin ?? "—"}
               </td>
             </tr>
           ))}
