@@ -154,6 +154,21 @@ export default async function DealerPage({ params }: PageProps) {
     : { data: [] };
   const evVehicleMap = new Map((eventVehicles ?? []).map((v) => [v.id, v]));
 
+  // Fetch last known mileage for sold vehicles from snapshots
+  const mileageMap = new Map<number, number | null>();
+  if (soldVehicleIds.length > 0) {
+    const { data: mileageSnaps } = await db
+      .from("inventory_snapshots")
+      .select("vehicle_id, mileage")
+      .in("vehicle_id", soldVehicleIds)
+      .eq("dealer_id", dealerId)
+      .not("mileage", "is", null)
+      .order("snapshot_date", { ascending: false });
+    for (const s of mileageSnaps ?? []) {
+      if (!mileageMap.has(s.vehicle_id)) mileageMap.set(s.vehicle_id, s.mileage);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -184,32 +199,30 @@ export default async function DealerPage({ params }: PageProps) {
           <h2 className="text-white font-semibold mb-4">
             Vehicles Sold MTD <span className="text-gray-500 font-normal text-xs ml-1">({(soldMTD ?? []).length})</span>
           </h2>
-          <div className="max-h-80 overflow-y-auto">
-            <VehicleEventList
-              events={(soldMTD ?? []).map(e => {
-                const v = evVehicleMap.get(e.vehicle_id);
-                return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.last_seen_price, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
-              })}
-              priceColor="text-green-400"
-              emptyMessage="No sales recorded yet"
-            />
-          </div>
+          <VehicleEventList
+            events={(soldMTD ?? []).map(e => {
+              const v = evVehicleMap.get(e.vehicle_id);
+              return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.last_seen_price, mileage: mileageMap.get(e.vehicle_id) ?? null, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
+            })}
+            priceColor="text-green-400"
+            emptyMessage="No sales recorded yet"
+            showMileage={true}
+          />
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <h2 className="text-white font-semibold mb-4">
             Vehicles Added MTD <span className="text-gray-500 font-normal text-xs ml-1">({(addedMTD ?? []).length})</span>
           </h2>
-          <div className="max-h-80 overflow-y-auto">
-            <VehicleEventList
-              events={(addedMTD ?? []).map(e => {
-                const v = evVehicleMap.get(e.vehicle_id);
-                return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.price_at_listing, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
-              })}
-              priceColor="text-blue-400"
-              emptyMessage="No additions recorded yet"
-            />
-          </div>
+          <VehicleEventList
+            events={(addedMTD ?? []).map(e => {
+              const v = evVehicleMap.get(e.vehicle_id);
+              return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.price_at_listing, mileage: null, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
+            })}
+            priceColor="text-blue-400"
+            emptyMessage="No additions recorded yet"
+            showMileage={false}
+          />
         </div>
       </div>
 
