@@ -16,7 +16,7 @@ const DEALERS: Dealer[] = [
   // Baja Auto Group — tracked (own)
   { name: "Baja East",           lat: 36.146930, lng: -115.101750, tracked: true, group: "Baja Auto Group",   address: "3333 E Fremont St, Las Vegas, NV 89104",        website: "https://www.bajaautos.com" },
   { name: "Baja West",           lat: 36.161386, lng: -115.206627, tracked: true, group: "Baja Auto Group",   address: "824 S Decatur Blvd, Las Vegas, NV 89107",        website: "https://www.bajaautos.com" },
-  { name: "Newport Motors",      lat: 36.143761, lng: -115.153080, tracked: true, group: "Baja Auto Group",   address: "2711 E Sahara Ave, Las Vegas, NV 89104",          website: "https://www.bajaautos.com" },
+  { name: "Newport Motors",      lat: 36.1444,   lng: -115.1132,  tracked: true, group: "Baja Auto Group",   address: "2711 E Sahara Ave, Las Vegas, NV 89104",          website: "https://www.bajaautos.com" },
 
   // Ariana Auto Group — tracked (competitor)
   { name: "Ariana Motors",       lat: 36.183497, lng: -115.062346, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110",         website: "https://www.arianamotorslv.com" },
