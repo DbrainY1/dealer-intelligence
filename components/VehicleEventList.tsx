@@ -84,7 +84,11 @@ export default function VehicleEventList({
             <tr key={i} className="hover:bg-gray-800/30">
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.year ?? "—"}</td>
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.make ?? "—"}</td>
-              <td className="py-2 pr-3 text-gray-300 whitespace-nowrap">{e.model ?? "—"}</td>
+              <td className="py-2 pr-3 text-gray-300 whitespace-nowrap">
+                {e.model
+                  ? e.model.replace(new RegExp(`^(${e.year}\\s*)?(${e.make}\\s*)?`, "i"), "").trim() || e.model
+                  : "—"}
+              </td>
               {showMileage && (
                 <td className="py-2 pr-3 text-right text-gray-400 whitespace-nowrap">
                   {e.mileage ? e.mileage.toLocaleString() : "—"}

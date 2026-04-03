@@ -98,7 +98,11 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
                 <td className="px-4 py-3 font-mono text-blue-400">{r.snapshot.stock_number ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.year ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.make ?? "—"}</td>
-                <td className="px-4 py-3">{r.vehicle?.model ?? "—"}</td>
+                <td className="px-4 py-3">
+                  {r.vehicle?.model
+                    ? r.vehicle.model.replace(new RegExp(`^(${r.vehicle.year}\\s*)?(${r.vehicle.make}\\s*)?`, "i"), "").trim() || r.vehicle.model
+                    : "—"}
+                </td>
                 <td className="px-4 py-3">
                   {r.snapshot.list_price != null
                     ? `$${r.snapshot.list_price.toLocaleString()}`
