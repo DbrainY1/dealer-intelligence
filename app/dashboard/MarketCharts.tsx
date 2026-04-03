@@ -60,7 +60,7 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
             <tr>
               <th className="px-4 py-3">Dealer</th>
               <th className="px-4 py-3">In Stock</th>
-              <th className="px-4 py-3">Est. Sold (30d)</th>
+              <th className="px-4 py-3">MTD Sold</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
