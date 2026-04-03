@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { createClient } from "@supabase/supabase-js";
 import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
+import VehicleEventList from "@/components/VehicleEventList";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
 
 interface PageProps {
@@ -179,60 +180,36 @@ export default async function DealerPage({ params }: PageProps) {
 
       {/* Sold / Added Lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Vehicles Sold MTD */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="text-white font-semibold mb-4">Vehicles Sold MTD</h2>
-          {(soldMTD ?? []).length === 0 ? (
-            <p className="text-gray-500 text-sm">No sales recorded yet</p>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {(soldMTD ?? []).map((e, i) => {
+          <h2 className="text-white font-semibold mb-4">
+            Vehicles Sold MTD <span className="text-gray-500 font-normal text-xs ml-1">({(soldMTD ?? []).length})</span>
+          </h2>
+          <div className="max-h-80 overflow-y-auto">
+            <VehicleEventList
+              events={(soldMTD ?? []).map(e => {
                 const v = evVehicleMap.get(e.vehicle_id);
-                return (
-                  <div key={i} className="flex justify-between items-center text-sm border-b border-gray-800 pb-2">
-                    <div>
-                      <p className="text-white">
-                        {v ? `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim() : `VID-${e.vehicle_id}`}
-                      </p>
-                      {v?.vin && <p className="text-gray-500 text-xs font-mono">{v.vin}</p>}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-green-400 text-xs">{e.last_seen_price ? `$${Math.round(e.last_seen_price).toLocaleString()}` : "—"}</p>
-                      <p className="text-gray-500 text-xs">{e.event_date?.slice(0, 10)}</p>
-                    </div>
-                  </div>
-                );
+                return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.last_seen_price, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
               })}
-            </div>
-          )}
+              priceColor="text-green-400"
+              emptyMessage="No sales recorded yet"
+            />
+          </div>
         </div>
 
-        {/* Vehicles Added MTD */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="text-white font-semibold mb-4">Vehicles Added MTD</h2>
-          {(addedMTD ?? []).length === 0 ? (
-            <p className="text-gray-500 text-sm">No new additions recorded yet</p>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {(addedMTD ?? []).map((e, i) => {
+          <h2 className="text-white font-semibold mb-4">
+            Vehicles Added MTD <span className="text-gray-500 font-normal text-xs ml-1">({(addedMTD ?? []).length})</span>
+          </h2>
+          <div className="max-h-80 overflow-y-auto">
+            <VehicleEventList
+              events={(addedMTD ?? []).map(e => {
                 const v = evVehicleMap.get(e.vehicle_id);
-                return (
-                  <div key={i} className="flex justify-between items-center text-sm border-b border-gray-800 pb-2">
-                    <div>
-                      <p className="text-white">
-                        {v ? `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim() : `VID-${e.vehicle_id}`}
-                      </p>
-                      {v?.vin && <p className="text-gray-500 text-xs font-mono">{v.vin}</p>}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-blue-400 text-xs">{e.price_at_listing ? `$${Math.round(e.price_at_listing).toLocaleString()}` : "—"}</p>
-                      <p className="text-gray-500 text-xs">{e.event_date?.slice(0, 10)}</p>
-                    </div>
-                  </div>
-                );
+                return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.price_at_listing, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
               })}
-            </div>
-          )}
+              priceColor="text-blue-400"
+              emptyMessage="No additions recorded yet"
+            />
+          </div>
         </div>
       </div>
 
