@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
 import CompetitorCharts from "./CompetitorCharts";
+import MarketPulseCards from "./MarketPulseCards";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
 const COMPETITOR_NAMES = ["Baja", "Newport", "Ariana", "Auto Vision", "Boktors", "Charlie", "Globul", "Hot Deals", "One Motors", "Platinum", "Queen", "Nellis", "RevEuro"];
@@ -106,46 +107,16 @@ export default async function CompetitorsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-white text-xl font-bold">Competitor Intel</h1>
+      <h1 className="text-white text-xl font-bold">Market Pulse</h1>
 
-      {/* Scorecards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-        {scorecards.map(({ dealer, count, avg, sold, added, removed }) => (
-          <div key={dealer.id} className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
-            {/* Dealer name — lighter header */}
-            <div className="bg-gray-700 px-3 py-2">
-              <p className="text-white font-bold text-sm truncate">{dealer.name}</p>
-            </div>
-
-            {/* Stats body */}
-            <div className="p-3 space-y-2">
-              {/* Inventory count + MTD Sold side by side */}
-              <div className="flex justify-between items-end">
-                <div>
-                  <p className="text-2xl font-bold text-blue-400">{count.toLocaleString()}</p>
-                  <p className="text-gray-500 text-xs">in stock</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-green-400">{sold}</p>
-                  <p className="text-gray-500 text-xs">MTD sold</p>
-                </div>
-              </div>
-
-              {/* Weekly activity */}
-              <div className="flex justify-between border-t border-gray-800 pt-2 text-xs">
-                <div className="flex items-center gap-1">
-                  <span className="text-green-300 font-semibold">↑ {added}</span>
-                  <span className="text-gray-500">added</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-red-300 font-semibold">↓ {removed}</span>
-                  <span className="text-gray-500">removed</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <MarketPulseCards scorecards={scorecards.map(({ dealer, count, sold, added, removed }) => ({
+        id: dealer.id,
+        name: dealer.name,
+        count,
+        sold,
+        added,
+        removed,
+      }))} />
 
       {/* 90-day trend chart */}
       <CompetitorCharts dealers={dealers} snapshots={allSnapshots} />
