@@ -18,7 +18,7 @@ function fmtN(n: number) {
 
 export default async function DealerPage({ params }: PageProps) {
   const supabase = await createServerSupabase();
-  const dealerId = Number(params.id);
+  const dealerId = params.id; // string — matches Supabase eq() behavior
 
   const { data: dealer } = await supabase
     .from("dealers")
