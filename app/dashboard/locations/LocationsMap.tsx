@@ -19,7 +19,7 @@ const DEALERS: Dealer[] = [
   { name: "Newport Motors",      lat: 36.1444,   lng: -115.1132,  tracked: true, group: "Baja Auto Group",   address: "2711 E Sahara Ave, Las Vegas, NV 89104",          website: "https://www.bajaautos.com" },
 
   // Ariana Auto Group — tracked (competitor)
-  { name: "Ariana Motors",       lat: 36.183497, lng: -115.062346, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110",         website: "https://www.arianamotorslv.com" },
+  { name: "Ariana Motors",       lat: 36.13072,  lng: -115.08514, tracked: true, group: "Ariana Auto Group", address: "4130 Boulder Hwy, Las Vegas, NV 89121",           website: "https://www.arianamotorslv.com" },
   { name: "Ariana Motors Nellis",lat: 36.183200, lng: -115.062500, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110",         website: "https://www.arianamotorsnellis.com" },
   { name: "One Motors LV",       lat: 36.142131, lng: -115.097747, tracked: true, group: "Ariana Auto Group", address: "3535 Boulder Hwy, Las Vegas, NV 89121",           website: "https://www.onemotorslv.com" },
 
@@ -31,7 +31,7 @@ const DEALERS: Dealer[] = [
   { name: "Auto Vision LV",      lat: 36.15229,  lng: -115.10936, tracked: true, address: "3020 E Fremont St, Las Vegas, NV 89104",          website: "https://www.autovisionlv.com" },
   { name: "Charlie Cheap Car",   lat: 36.144680, lng: -115.208592, tracked: true, address: "5015 W Sahara Ave #127, Las Vegas, NV 89146",     website: "https://www.charliecheapcar.com" },
   { name: "Hot Deals Auto",      lat: 36.12800,  lng: -115.20850, tracked: true, address: "3401 S Decatur Blvd, Las Vegas, NV 89102",          website: "https://www.hotdealsauto.com" },
-  { name: "RevEuro",             lat: 36.056880, lng: -115.097317, tracked: true, address: "2540 W Warm Springs Rd, Las Vegas, NV 89119",        website: "https://www.reveuro.com" },
+  { name: "RevEuro",             lat: 36.05766,  lng: -115.17624, tracked: true, address: "2540 W Warm Springs Rd, Las Vegas, NV 89119",        website: "https://www.reveuro.com" },
 ];
 
 export default function LocationsMap() {
