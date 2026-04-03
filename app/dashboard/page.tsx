@@ -75,7 +75,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-white text-xl font-bold">Market Overview — {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</h1>
+      <h1 className="text-white text-xl font-bold">Market Overview — {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" })}</h1>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KPICard label="Total Market Inventory" value={totalInventory.toLocaleString()} trend="neutral" />
         <KPICard label="Avg List Price" value={`$${avgPrice.toLocaleString()}`} trend="neutral" />
