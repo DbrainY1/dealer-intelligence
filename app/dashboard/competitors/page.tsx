@@ -109,35 +109,39 @@ export default async function CompetitorsPage() {
       <h1 className="text-white text-xl font-bold">Competitor Intel</h1>
 
       {/* Scorecards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {scorecards.map(({ dealer, count, avg, sold, added, removed }) => (
-          <div key={dealer.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
-            {/* Dealer name */}
-            <p className="text-white font-bold text-base truncate">{dealer.name}</p>
-
-            {/* Inventory count + MTD Sold side by side — big stats */}
-            <div className="flex justify-between items-end">
-              <div>
-                <p className="text-3xl font-bold text-blue-400">{count.toLocaleString()}</p>
-                <p className="text-gray-500 text-xs">in stock</p>
-              </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold text-green-400">{sold}</p>
-                <p className="text-gray-500 text-xs">MTD sold</p>
-              </div>
+          <div key={dealer.id} className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+            {/* Dealer name — lighter header */}
+            <div className="bg-gray-700 px-3 py-2">
+              <p className="text-white font-bold text-sm truncate">{dealer.name}</p>
             </div>
 
-            {/* Weekly activity */}
-            <div className="flex justify-between border-t border-gray-800 pt-3 text-sm">
-              <div className="flex items-center gap-1">
-                <span className="text-green-300 font-semibold">↑ {added}</span>
-                <span className="text-gray-500 text-xs">added</span>
+            {/* Stats body */}
+            <div className="p-3 space-y-2">
+              {/* Inventory count + MTD Sold side by side */}
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-2xl font-bold text-blue-400">{count.toLocaleString()}</p>
+                  <p className="text-gray-500 text-xs">in stock</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-green-400">{sold}</p>
+                  <p className="text-gray-500 text-xs">MTD sold</p>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-red-300 font-semibold">↓ {removed}</span>
-                <span className="text-gray-500 text-xs">removed</span>
+
+              {/* Weekly activity */}
+              <div className="flex justify-between border-t border-gray-800 pt-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <span className="text-green-300 font-semibold">↑ {added}</span>
+                  <span className="text-gray-500">added</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-red-300 font-semibold">↓ {removed}</span>
+                  <span className="text-gray-500">removed</span>
+                </div>
               </div>
-              <p className="text-gray-600 text-xs self-end">this week</p>
             </div>
           </div>
         ))}
