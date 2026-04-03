@@ -43,7 +43,7 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
         </ResponsiveContainer>
       </div>
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <p className="text-gray-400 text-sm mb-3">Sales Velocity (Units Removed Last 30d)</p>
+        <p className="text-gray-400 text-sm mb-3">Sales Velocity (Units Removed Last MTD)</p>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={byDealer}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
