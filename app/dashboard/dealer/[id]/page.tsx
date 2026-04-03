@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { createServerSupabase, createDataSupabase } from "@/lib/supabase-server";
+import { createDataSupabase } from "@/lib/supabase-server";
 import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
@@ -17,9 +17,8 @@ function fmtN(n: number) {
 }
 
 export default async function DealerPage({ params }: PageProps) {
-  const supabase = await createServerSupabase();
-  const dealerId = params.id; // string — matches Supabase eq() behavior
-  const db = createDataSupabase(); // direct client for data queries
+  const dealerId = params.id;
+  const db = createDataSupabase();
 
   const { data: dealer } = await db
     .from("dealers")
@@ -39,7 +38,7 @@ export default async function DealerPage({ params }: PageProps) {
   const today = now.toISOString().split("T")[0];
 
   // ── Sold events (removal detector) ───────────────────────────────
-  const { data: soldMTD } = await supabase
+  const { data: soldMTD } = await db
     .from("inventory_events")
     .select("vehicle_id, event_date, last_seen_price")
     .eq("from_dealer_id", dealerId)
@@ -47,7 +46,7 @@ export default async function DealerPage({ params }: PageProps) {
     .gte("event_date", monthStart)
     .order("event_date", { ascending: false });
 
-  const { data: soldYTD } = await supabase
+  const { data: soldYTD } = await db
     .from("inventory_events")
     .select("vehicle_id, event_date, last_seen_price")
     .eq("from_dealer_id", dealerId)
@@ -70,7 +69,7 @@ export default async function DealerPage({ params }: PageProps) {
   const ytdPace = Math.round(ytdDailyRate * daysInYear);
 
   // ── Added events ──────────────────────────────────────────────────
-  const { data: addedMTD } = await supabase
+  const { data: addedMTD } = await db
     .from("inventory_events")
     .select("vehicle_id, event_date, price_at_listing")
     .eq("from_dealer_id", dealerId)
@@ -79,7 +78,7 @@ export default async function DealerPage({ params }: PageProps) {
     .order("event_date", { ascending: false });
 
   // ── Current inventory ─────────────────────────────────────────────
-  const { data: snapshots } = await supabase
+  const { data: snapshots } = await db
     .from("inventory_snapshots")
     .select("*")
     .eq("dealer_id", dealerId)
