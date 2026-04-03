@@ -1,5 +1,4 @@
 import { createServerSupabase } from "@/lib/supabase-server";
-import KPICard from "@/components/KPICard";
 import RoleGuard from "@/components/RoleGuard";
 import CompetitorCharts from "./CompetitorCharts";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
@@ -13,13 +12,16 @@ export default async function CompetitorsPage() {
   const dealers: Dealer[] = (allDealers ?? []).filter((d: Dealer) =>
     COMPETITOR_NAMES.some((n) => d.name.toLowerCase().includes(n.toLowerCase()))
   );
+  const dealerIds = dealers.map((d) => d.id);
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const monthStart = new Date();
+  monthStart.setDate(1);
 
-  // Query each dealer separately to avoid 1000-row Supabase limit
+  // 90-day snapshots for trend chart
   const allSnapshots: InventorySnapshot[] = [];
   await Promise.all(
     dealers.map(async (d) => {
@@ -33,19 +35,34 @@ export default async function CompetitorsPage() {
     })
   );
 
-  const dealerIds = dealers.map((d) => d.id);
-  const { data: recentEvents } = await supabase
+  // Weekly adds and removes
+  const { data: weeklyAdds } = await supabase
     .from("inventory_events")
-    .select("*")
+    .select("dealer_id, vehicle_id, event_date, price_at_listing")
     .in("dealer_id", dealerIds)
     .eq("event_type", "added")
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
     .order("event_date", { ascending: false });
 
-  const eventList: InventoryEvent[] = recentEvents ?? [];
+  const { data: weeklyRemovals } = await supabase
+    .from("inventory_events")
+    .select("dealer_id")
+    .in("dealer_id", dealerIds)
+    .eq("event_type", "removed")
+    .gte("event_date", sevenDaysAgo.toISOString().split("T")[0]);
 
-  // Avg list price per competitor — latest snapshot date only, exclude nulls
-  const kpis = await Promise.all(dealers.map(async (d) => {
+  const eventList: InventoryEvent[] = weeklyAdds ?? [];
+
+  // MTD sold per dealer
+  const { data: monthlySales } = await supabase
+    .from("monthly_sales")
+    .select("dealer_id, units_sold")
+    .eq("month_start", monthStart.toISOString().split("T")[0])
+    .in("dealer_id", dealerIds);
+  const soldByDealer = new Map((monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [r.dealer_id, r.units_sold ?? 0]));
+
+  // Per-dealer scorecard data: inventory count + avg price
+  const scorecards = await Promise.all(dealers.map(async (d) => {
     const { data: latest } = await supabase
       .from("inventory_snapshots")
       .select("snapshot_date")
@@ -54,34 +71,86 @@ export default async function CompetitorsPage() {
       .limit(1)
       .single();
 
-    if (!latest) return { dealer: d, avg: 0 };
+    if (!latest) return { dealer: d, count: 0, avg: 0, sold: 0, added: 0, removed: 0 };
 
-    const { data: snaps } = await supabase
-      .from("inventory_snapshots")
-      .select("list_price")
-      .eq("dealer_id", d.id)
-      .eq("snapshot_date", latest.snapshot_date)
-      .not("list_price", "is", null);
+    const [{ count }, { data: snaps }] = await Promise.all([
+      supabase
+        .from("inventory_snapshots")
+        .select("id", { count: "exact" })
+        .eq("dealer_id", d.id)
+        .eq("snapshot_date", latest.snapshot_date),
+      supabase
+        .from("inventory_snapshots")
+        .select("list_price")
+        .eq("dealer_id", d.id)
+        .eq("snapshot_date", latest.snapshot_date)
+        .not("list_price", "is", null),
+    ]);
 
     const priced = snaps ?? [];
-    const total = Math.round(priced.reduce((sum, s) => sum + (s.list_price ?? 0), 0));
-    const avg = priced.length ? Math.round(total / priced.length) : 0;
-    return { dealer: d, avg, total };
+    const avg = priced.length ? Math.round(priced.reduce((s, r) => s + (r.list_price ?? 0), 0) / priced.length) : 0;
+    const added = (weeklyAdds ?? []).filter((e) => e.dealer_id === d.id).length;
+    const removed = (weeklyRemovals ?? []).filter((e) => e.dealer_id === d.id).length;
+
+    return {
+      dealer: d,
+      count: count ?? 0,
+      avg,
+      sold: soldByDealer.get(d.id) ?? 0,
+      added,
+      removed,
+    };
   }));
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-white text-xl font-bold">Competitor Intel</h1>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map(({ dealer, avg, total }) => (
-          <div key={dealer.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <p className="text-white font-bold text-lg mb-2">{dealer.name}</p>
-            <p className="text-gray-400 text-xs">Total: {(total ?? 0) > 0 ? `$${(total ?? 0).toLocaleString()}` : "—"}</p>
-            <p className="text-gray-400 text-xs mt-1">Avg: {avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
+
+      {/* Scorecards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {scorecards.map(({ dealer, count, avg, sold, added, removed }) => (
+          <div key={dealer.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+            {/* Dealer name */}
+            <p className="text-white font-bold text-base truncate">{dealer.name}</p>
+
+            {/* Inventory count — big stat */}
+            <div>
+              <p className="text-3xl font-bold text-blue-400">{count.toLocaleString()}</p>
+              <p className="text-gray-500 text-xs">vehicles in stock</p>
+            </div>
+
+            {/* Avg price + MTD sold */}
+            <div className="flex justify-between text-sm">
+              <div>
+                <p className="text-gray-400 text-xs">Avg Price</p>
+                <p className="text-white font-semibold">{avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-gray-400 text-xs">MTD Sold</p>
+                <p className="text-white font-semibold">{sold}</p>
+              </div>
+            </div>
+
+            {/* Weekly activity */}
+            <div className="flex justify-between border-t border-gray-800 pt-3 text-sm">
+              <div className="flex items-center gap-1">
+                <span className="text-green-400 font-bold">↑ {added}</span>
+                <span className="text-gray-500 text-xs">added</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-red-400 font-bold">↓ {removed}</span>
+                <span className="text-gray-500 text-xs">removed</span>
+              </div>
+              <p className="text-gray-600 text-xs self-end">this week</p>
+            </div>
           </div>
         ))}
       </div>
+
+      {/* 90-day trend chart */}
       <CompetitorCharts dealers={dealers} snapshots={allSnapshots} />
+
+      {/* New listings this week */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-white font-semibold mb-4">New Listings (Last 7 Days)</h2>
         <table className="w-full text-sm text-left text-gray-300">
@@ -110,6 +179,7 @@ export default async function CompetitorsPage() {
           </tbody>
         </table>
       </div>
+
       <RoleGuard roles={["owner", "developer"]}>
         <div className="bg-gray-900 border border-amber-900/40 rounded-lg p-4">
           <h2 className="text-white font-semibold mb-2">Estimated Sales (Restricted)</h2>
