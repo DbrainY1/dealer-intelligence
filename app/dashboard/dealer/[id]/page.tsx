@@ -16,6 +16,30 @@ function fmtN(n: number) {
   return n > 0 ? n.toLocaleString() : "0";
 }
 
+function SummaryRow({ label, units, pace, avg, total }: { label: string; units: number; pace: number; avg: number; total: number }) {
+  return (
+    <div className="flex flex-wrap gap-6 items-center">
+      <span className="text-gray-400 text-xs w-10 shrink-0">{label}</span>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmtN(units)}</p>
+        <p className="text-gray-500 text-xs">Sold</p>
+      </div>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmtN(pace)}</p>
+        <p className="text-gray-500 text-xs">Pace</p>
+      </div>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmt$(avg)}</p>
+        <p className="text-gray-500 text-xs">Avg Price</p>
+      </div>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmt$(total)}</p>
+        <p className="text-gray-500 text-xs">Total Revenue</p>
+      </div>
+    </div>
+  );
+}
+
 export default async function DealerPage({ params }: PageProps) {
   const dealerId = params.id;
   const db = createClient(
@@ -128,28 +152,6 @@ export default async function DealerPage({ params }: PageProps) {
     ? await db.from("vehicles").select("id, vin, year, make, model").in("id", allEventVehicleIds)
     : { data: [] };
   const evVehicleMap = new Map((eventVehicles ?? []).map((v) => [v.id, v]));
-
-  const SummaryRow = ({ label, units, pace, avg, total }: { label: string; units: number; pace: number; avg: number; total: number }) => (
-    <div className="flex flex-wrap gap-6 items-center">
-      <span className="text-gray-400 text-xs w-10 shrink-0">{label}</span>
-      <div className="text-center">
-        <p className="text-white font-bold text-base">{fmtN(units)}</p>
-        <p className="text-gray-500 text-xs">Sold</p>
-      </div>
-      <div className="text-center">
-        <p className="text-white font-bold text-base">{fmtN(pace)}</p>
-        <p className="text-gray-500 text-xs">Pace</p>
-      </div>
-      <div className="text-center">
-        <p className="text-white font-bold text-base">{fmt$(avg)}</p>
-        <p className="text-gray-500 text-xs">Avg Price</p>
-      </div>
-      <div className="text-center">
-        <p className="text-white font-bold text-base">{fmt$(total)}</p>
-        <p className="text-gray-500 text-xs">Total Revenue</p>
-      </div>
-    </div>
-  );
 
   return (
     <div className="p-6 space-y-6">
