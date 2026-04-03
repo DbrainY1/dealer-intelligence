@@ -154,13 +154,14 @@ export default async function DealerPage({ params }: PageProps) {
     : { data: [] };
   const evVehicleMap = new Map((eventVehicles ?? []).map((v) => [v.id, v]));
 
-  // Fetch last known mileage for sold vehicles from snapshots
+  // Fetch last known mileage for sold + added vehicles from snapshots
   const mileageMap = new Map<number, number | null>();
-  if (soldVehicleIds.length > 0) {
+  const allMileageIds = [...new Set([...soldVehicleIds, ...addedVehicleIds])];
+  if (allMileageIds.length > 0) {
     const { data: mileageSnaps } = await db
       .from("inventory_snapshots")
       .select("vehicle_id, mileage")
-      .in("vehicle_id", soldVehicleIds)
+      .in("vehicle_id", allMileageIds)
       .eq("dealer_id", dealerId)
       .not("mileage", "is", null)
       .order("snapshot_date", { ascending: false });
@@ -217,11 +218,11 @@ export default async function DealerPage({ params }: PageProps) {
           <VehicleEventList
             events={(addedMTD ?? []).map(e => {
               const v = evVehicleMap.get(e.vehicle_id);
-              return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.price_at_listing, mileage: null, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
+              return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.price_at_listing, mileage: mileageMap.get(e.vehicle_id) ?? null, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
             })}
             priceColor="text-blue-400"
             emptyMessage="No additions recorded yet"
-            showMileage={false}
+            showMileage={true}
           />
         </div>
       </div>

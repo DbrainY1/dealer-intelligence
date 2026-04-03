@@ -85,11 +85,7 @@ export default function VehicleEventList({
               <td className="py-2 pr-3 text-gray-400 whitespace-nowrap">{e.event_date?.slice(0, 10)}</td>
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.year ?? "—"}</td>
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.make ?? "—"}</td>
-              <td className="py-2 pr-3 text-gray-300 whitespace-nowrap">
-                {e.model
-                  ? e.model.replace(new RegExp(`^(${e.year}\\s*)?(${e.make}\\s*)?`, "i"), "").trim() || e.model
-                  : "—"}
-              </td>
+              <td className="py-2 pr-3 text-gray-300 whitespace-nowrap">{e.model ?? "—"}</td>
               {showMileage && (
                 <td className="py-2 pr-3 text-right text-gray-400 whitespace-nowrap">
                   {e.mileage ? e.mileage.toLocaleString() : "—"}
