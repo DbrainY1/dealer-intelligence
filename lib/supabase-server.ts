@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 export const createServerSupabase = async () => {
@@ -24,3 +25,10 @@ export const createServerSupabase = async () => {
     }
   );
 };
+
+// Direct data client — bypasses cookie auth for server-side data queries
+export const createDataSupabase = () =>
+  createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );

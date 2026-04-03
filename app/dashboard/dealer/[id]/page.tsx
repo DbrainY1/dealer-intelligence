@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase, createDataSupabase } from "@/lib/supabase-server";
 import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
@@ -19,8 +19,9 @@ function fmtN(n: number) {
 export default async function DealerPage({ params }: PageProps) {
   const supabase = await createServerSupabase();
   const dealerId = params.id; // string — matches Supabase eq() behavior
+  const db = createDataSupabase(); // direct client for data queries
 
-  const { data: dealer } = await supabase
+  const { data: dealer } = await db
     .from("dealers")
     .select("*")
     .eq("id", dealerId)
@@ -94,7 +95,7 @@ export default async function DealerPage({ params }: PageProps) {
 
   const vehicleIds = latest.map((s) => s.vehicle_id);
   const { data: vehicles } = vehicleIds.length
-    ? await supabase.from("vehicles").select("*").in("id", vehicleIds)
+    ? await db.from("vehicles").select("*").in("id", vehicleIds)
     : { data: [] };
   const vehicleList: Vehicle[] = vehicles ?? [];
 
@@ -122,7 +123,7 @@ export default async function DealerPage({ params }: PageProps) {
   const addedVehicleIds = (addedMTD ?? []).map((e) => e.vehicle_id).filter(Boolean);
   const allEventVehicleIds = [...new Set([...soldVehicleIds, ...addedVehicleIds])];
   const { data: eventVehicles } = allEventVehicleIds.length
-    ? await supabase.from("vehicles").select("id, vin, year, make, model").in("id", allEventVehicleIds)
+    ? await db.from("vehicles").select("id, vin, year, make, model").in("id", allEventVehicleIds)
     : { data: [] };
   const evVehicleMap = new Map((eventVehicles ?? []).map((v) => [v.id, v]));
 
