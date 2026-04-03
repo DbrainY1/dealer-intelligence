@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { createServerSupabase } from "@/lib/supabase-server";
 import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
@@ -7,24 +9,83 @@ interface PageProps {
   params: { id: string };
 }
 
+function fmt$(n: number) {
+  return n > 0 ? `$${Math.round(n).toLocaleString()}` : "—";
+}
+function fmtN(n: number) {
+  return n > 0 ? n.toLocaleString() : "0";
+}
+
 export default async function DealerPage({ params }: PageProps) {
   const supabase = await createServerSupabase();
+  const dealerId = Number(params.id);
 
   const { data: dealer } = await supabase
     .from("dealers")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", dealerId)
     .single<Dealer>();
 
+  // ── MTD / YTD dates ──────────────────────────────────────────────
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayOfYear = Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+  const daysInYear = ((now.getFullYear() % 4 === 0 && now.getFullYear() % 100 !== 0) || now.getFullYear() % 400 === 0) ? 366 : 365;
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+  const yearStart = `${now.getFullYear()}-01-01`;
+  const today = now.toISOString().split("T")[0];
+
+  // ── Sold events (removal detector) ───────────────────────────────
+  const { data: soldMTD } = await supabase
+    .from("inventory_events")
+    .select("vehicle_id, event_date, last_seen_price")
+    .eq("from_dealer_id", dealerId)
+    .eq("event_type", "removed")
+    .gte("event_date", monthStart)
+    .order("event_date", { ascending: false });
+
+  const { data: soldYTD } = await supabase
+    .from("inventory_events")
+    .select("vehicle_id, event_date, last_seen_price")
+    .eq("from_dealer_id", dealerId)
+    .eq("event_type", "removed")
+    .gte("event_date", yearStart)
+    .order("event_date", { ascending: false });
+
+  const mtdUnits = soldMTD?.length ?? 0;
+  const ytdUnits = soldYTD?.length ?? 0;
+
+  const mtdRevenue = (soldMTD ?? []).reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
+  const ytdRevenue = (soldYTD ?? []).reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
+  const mtdAvg = mtdUnits > 0 ? mtdRevenue / mtdUnits : 0;
+  const ytdAvg = ytdUnits > 0 ? ytdRevenue / ytdUnits : 0;
+
+  // Pace projections
+  const mtdDailyRate = dayOfMonth > 0 ? mtdUnits / dayOfMonth : 0;
+  const mtdPace = Math.round(mtdDailyRate * daysInMonth);
+  const ytdDailyRate = dayOfYear > 0 ? ytdUnits / dayOfYear : 0;
+  const ytdPace = Math.round(ytdDailyRate * daysInYear);
+
+  // ── Added events ──────────────────────────────────────────────────
+  const { data: addedMTD } = await supabase
+    .from("inventory_events")
+    .select("vehicle_id, event_date, price_at_listing")
+    .eq("from_dealer_id", dealerId)
+    .eq("event_type", "added")
+    .gte("event_date", monthStart)
+    .order("event_date", { ascending: false });
+
+  // ── Current inventory ─────────────────────────────────────────────
   const { data: snapshots } = await supabase
     .from("inventory_snapshots")
     .select("*")
-    .eq("dealer_id", params.id)
+    .eq("dealer_id", dealerId)
     .order("snapshot_date", { ascending: false });
 
   const snapshotList: InventorySnapshot[] = snapshots ?? [];
 
-  // Latest snapshot per vehicle_id
   const latestByVehicle = new Map<number, InventorySnapshot>();
   for (const s of snapshotList) {
     if (!latestByVehicle.has(s.vehicle_id)) latestByVehicle.set(s.vehicle_id, s);
@@ -42,79 +103,138 @@ export default async function DealerPage({ params }: PageProps) {
     vehicle: vehicleList.find((v) => v.id === s.vehicle_id),
   }));
 
-  // Inventory trend last 30 days
+  // ── Trend chart ───────────────────────────────────────────────────
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const trendMap = new Map<string, number>();
   for (const s of snapshotList) {
     if (new Date(s.snapshot_date) >= thirtyDaysAgo) {
       const date = s.snapshot_date.slice(0, 10);
-      if (!trendMap.has(date)) trendMap.set(date, 0);
-      if (s.status === "active") trendMap.set(date, (trendMap.get(date) ?? 0) + 1);
+      trendMap.set(date, (trendMap.get(date) ?? 0) + 1);
     }
   }
   const trendData = Array.from(trendMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, value]) => ({ date, value }));
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const { data: recentEvents } = await supabase
-    .from("inventory_events")
-    .select("*")
-    .eq("dealer_id", params.id)
-    .gte("event_date", sevenDaysAgo.toISOString())
-    .order("event_date", { ascending: false });
+  // Fetch vehicle info for sold/added events
+  const soldVehicleIds = (soldMTD ?? []).map((e) => e.vehicle_id).filter(Boolean);
+  const addedVehicleIds = (addedMTD ?? []).map((e) => e.vehicle_id).filter(Boolean);
+  const allEventVehicleIds = [...new Set([...soldVehicleIds, ...addedVehicleIds])];
+  const { data: eventVehicles } = allEventVehicleIds.length
+    ? await supabase.from("vehicles").select("id, vin, year, make, model").in("id", allEventVehicleIds)
+    : { data: [] };
+  const evVehicleMap = new Map((eventVehicles ?? []).map((v) => [v.id, v]));
 
-  const eventList: InventoryEvent[] = recentEvents ?? [];
-  const recentAdded = eventList.filter((e) => e.event_type === "added");
-  const recentRemoved = eventList.filter((e) => e.event_type === "removed");
+  const SummaryRow = ({ label, units, pace, avg, total }: { label: string; units: number; pace: number; avg: number; total: number }) => (
+    <div className="flex flex-wrap gap-6 items-center">
+      <span className="text-gray-400 text-xs w-10 shrink-0">{label}</span>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmtN(units)}</p>
+        <p className="text-gray-500 text-xs">Sold</p>
+      </div>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmtN(pace)}</p>
+        <p className="text-gray-500 text-xs">Pace</p>
+      </div>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmt$(avg)}</p>
+        <p className="text-gray-500 text-xs">Avg Price</p>
+      </div>
+      <div className="text-center">
+        <p className="text-white font-bold text-base">{fmt$(total)}</p>
+        <p className="text-gray-500 text-xs">Total Revenue</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-white text-xl font-bold">{dealer?.name ?? "Dealer"}</h1>
+      {/* Header */}
+      <div>
+        <h1 className="text-white text-xl font-bold">{dealer?.name ?? "Dealer"}</h1>
+        <p className="text-gray-500 text-xs mt-0.5">{today}</p>
+      </div>
+
+      {/* Summary Bar */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
+        <SummaryRow label="MTD" units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
+        <div className="border-t border-gray-800" />
+        <SummaryRow label="YTD" units={ytdUnits} pace={ytdPace} avg={ytdAvg} total={ytdRevenue} />
+      </div>
+
+      {/* Trend + Current Inventory */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TrendChart data={trendData} label="Inventory Count (Last 30 Days)" color="#3b82f6" />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <p className="text-gray-400 text-sm">Recent Additions (7d)</p>
-            <p className="text-white text-2xl font-bold">{recentAdded.length}</p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <p className="text-gray-400 text-sm">Recent Removals (7d)</p>
-            <p className="text-white text-2xl font-bold">{recentRemoved.length}</p>
-          </div>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <p className="text-gray-400 text-sm mb-1">Currently In Stock</p>
+          <p className="text-white text-3xl font-bold">{latest.length}</p>
         </div>
       </div>
+
+      {/* Sold / Added Lists */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Vehicles Sold MTD */}
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <h2 className="text-white font-semibold mb-4">Vehicles Sold MTD</h2>
+          {(soldMTD ?? []).length === 0 ? (
+            <p className="text-gray-500 text-sm">No sales recorded yet</p>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {(soldMTD ?? []).map((e, i) => {
+                const v = evVehicleMap.get(e.vehicle_id);
+                return (
+                  <div key={i} className="flex justify-between items-center text-sm border-b border-gray-800 pb-2">
+                    <div>
+                      <p className="text-white">
+                        {v ? `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim() : `VID-${e.vehicle_id}`}
+                      </p>
+                      {v?.vin && <p className="text-gray-500 text-xs font-mono">{v.vin}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-green-400 text-xs">{e.last_seen_price ? `$${Math.round(e.last_seen_price).toLocaleString()}` : "—"}</p>
+                      <p className="text-gray-500 text-xs">{e.event_date?.slice(0, 10)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Vehicles Added MTD */}
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <h2 className="text-white font-semibold mb-4">Vehicles Added MTD</h2>
+          {(addedMTD ?? []).length === 0 ? (
+            <p className="text-gray-500 text-sm">No new additions recorded yet</p>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {(addedMTD ?? []).map((e, i) => {
+                const v = evVehicleMap.get(e.vehicle_id);
+                return (
+                  <div key={i} className="flex justify-between items-center text-sm border-b border-gray-800 pb-2">
+                    <div>
+                      <p className="text-white">
+                        {v ? `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim() : `VID-${e.vehicle_id}`}
+                      </p>
+                      {v?.vin && <p className="text-gray-500 text-xs font-mono">{v.vin}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-blue-400 text-xs">{e.price_at_listing ? `$${Math.round(e.price_at_listing).toLocaleString()}` : "—"}</p>
+                      <p className="text-gray-500 text-xs">{e.event_date?.slice(0, 10)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Full Inventory Table */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-white font-semibold mb-4">Current Inventory</h2>
         <InventoryTable rows={rows} />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="text-white font-semibold mb-3">Recent Additions</h2>
-          <div className="space-y-2">
-            {recentAdded.slice(0, 8).map((e) => (
-              <div key={e.id} className="flex justify-between text-sm">
-                <span className="font-mono text-blue-400">VID-{e.vehicle_id}</span>
-                <span className="text-gray-400">{e.event_date.slice(0, 10)}</span>
-              </div>
-            ))}
-            {recentAdded.length === 0 && <p className="text-gray-500 text-sm">None</p>}
-          </div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="text-white font-semibold mb-3">Recent Removals</h2>
-          <div className="space-y-2">
-            {recentRemoved.slice(0, 8).map((e) => (
-              <div key={e.id} className="flex justify-between text-sm">
-                <span className="font-mono text-blue-400">VID-{e.vehicle_id}</span>
-                <span className="text-gray-400">{e.event_date.slice(0, 10)}</span>
-              </div>
-            ))}
-            {recentRemoved.length === 0 && <p className="text-gray-500 text-sm">None</p>}
-          </div>
-        </div>
       </div>
     </div>
   );

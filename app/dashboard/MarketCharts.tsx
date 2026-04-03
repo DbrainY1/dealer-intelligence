@@ -10,7 +10,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { Dealer } from "@/types";
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface DealerRow {
@@ -26,7 +25,6 @@ interface Props {
 
 export default function MarketCharts({ byDealer, dealers }: Props) {
   const router = useRouter();
-  const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -68,29 +66,16 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
             {byDealer.map((d) => {
               const dealer = dealers.find((x) => x.name === d.name);
               return (
-                <React.Fragment key={d.name}>
-                  <tr
-                    className="border-b border-gray-800 hover:bg-gray-800 cursor-pointer"
-                    onClick={() => setExpanded(expanded === d.name ? null : d.name)}
-                  >
-                    <td className="px-4 py-3 text-white">{d.name}</td>
-                    <td className="px-4 py-3">{d.count}</td>
-                    <td className="px-4 py-3">{d.sold}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{expanded === d.name ? "▲" : "▼"}</td>
-                  </tr>
-                  {expanded === d.name && dealer && (
-                    <tr className="bg-gray-800/50">
-                      <td colSpan={4} className="px-4 py-3">
-                        <button
-                          className="text-blue-400 text-xs hover:underline"
-                          onClick={() => router.push(`/dashboard/dealer/${dealer.id}`)}
-                        >
-                          View dealer detail →
-                        </button>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr
+                  key={d.name}
+                  className="border-b border-gray-800 hover:bg-gray-800 cursor-pointer transition-colors"
+                  onClick={() => dealer && router.push(`/dashboard/dealer/${dealer.id}`)}
+                >
+                  <td className="px-4 py-3 text-white font-medium">{d.name}</td>
+                  <td className="px-4 py-3">{d.count}</td>
+                  <td className="px-4 py-3">{d.sold}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">→</td>
+                </tr>
               );
             })}
           </tbody>
