@@ -21,6 +21,9 @@ export default async function CompetitorsPage() {
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
   const monthStart = new Date();
   monthStart.setDate(1);
 
@@ -38,7 +41,7 @@ export default async function CompetitorsPage() {
     })
   );
 
-  // Weekly adds and removes
+  // Weekly adds (kept for New Listings table)
   const { data: weeklyAdds } = await supabase
     .from("inventory_events")
     .select("*")
@@ -46,13 +49,6 @@ export default async function CompetitorsPage() {
     .eq("event_type", "added")
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
     .order("event_date", { ascending: false });
-
-  const { data: weeklyRemovals } = await supabase
-    .from("inventory_events")
-    .select("dealer_id")
-    .in("dealer_id", dealerIds)
-    .eq("event_type", "removed")
-    .gte("event_date", sevenDaysAgo.toISOString().split("T")[0]);
 
   const eventList: InventoryEvent[] = weeklyAdds ?? [];
 
@@ -76,7 +72,7 @@ export default async function CompetitorsPage() {
 
     if (!latest) return { dealer: d, count: 0, avg: 0, sold: 0, added: 0, removed: 0 };
 
-    const [{ count }, { data: snaps }] = await Promise.all([
+    const [{ count }, { data: snaps }, { data: todayVids }, { data: yesterdayVids }] = await Promise.all([
       supabase
         .from("inventory_snapshots")
         .select("id", { count: "exact" })
@@ -88,12 +84,24 @@ export default async function CompetitorsPage() {
         .eq("dealer_id", d.id)
         .eq("snapshot_date", latest.snapshot_date)
         .not("list_price", "is", null),
+      supabase
+        .from("inventory_snapshots")
+        .select("vehicle_id")
+        .eq("dealer_id", d.id)
+        .eq("snapshot_date", latest.snapshot_date),
+      supabase
+        .from("inventory_snapshots")
+        .select("vehicle_id")
+        .eq("dealer_id", d.id)
+        .eq("snapshot_date", yesterdayStr),
     ]);
 
     const priced = snaps ?? [];
     const avg = priced.length ? Math.round(priced.reduce((s, r) => s + (r.list_price ?? 0), 0) / priced.length) : 0;
-    const added = (weeklyAdds ?? []).filter((e) => e.dealer_id === d.id).length;
-    const removed = (weeklyRemovals ?? []).filter((e) => e.dealer_id === d.id).length;
+    const todaySet = new Set((todayVids ?? []).map((r) => r.vehicle_id));
+    const oldSet = new Set((yesterdayVids ?? []).map((r) => r.vehicle_id));
+    const added = oldSet.size > 0 ? [...todaySet].filter((id) => !oldSet.has(id)).length : 0;
+    const removed = oldSet.size > 0 ? [...oldSet].filter((id) => !todaySet.has(id)).length : 0;
 
     return {
       dealer: d,
