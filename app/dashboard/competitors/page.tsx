@@ -127,12 +127,6 @@ export default async function CompetitorsPage() {
               </div>
             </div>
 
-            {/* Avg price */}
-            <div>
-              <p className="text-gray-400 text-xs">Avg Price</p>
-              <p className="text-white font-semibold">{avg > 0 ? `$${avg.toLocaleString()}` : "—"}</p>
-            </div>
-
             {/* Weekly activity */}
             <div className="flex justify-between border-t border-gray-800 pt-3 text-sm">
               <div className="flex items-center gap-1">
