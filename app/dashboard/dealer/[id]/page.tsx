@@ -6,7 +6,7 @@ import TrendChart from "@/components/TrendChart";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 function fmt$(n: number) {
@@ -41,7 +41,7 @@ function SummaryRow({ label, units, pace, avg, total }: { label: string; units: 
 }
 
 export default async function DealerPage({ params }: PageProps) {
-  const dealerId = params.id;
+  const { id: dealerId } = await params;
   const db = createClient(
     "https://jrgavepbhlrltfadeuke.supabase.co",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyZ2F2ZXBiaGxybHRmYWRldWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5Njg5NDgsImV4cCI6MjA5MDU0NDk0OH0.It2KkRiTmtZJfPKSEBAvLmsA8aM3WgWhtGUd2smS2nk"
