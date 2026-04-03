@@ -20,7 +20,6 @@ const DEALERS: Dealer[] = [
 
   // Ariana Auto Group — tracked (competitor)
   { name: "Ariana Motors",       lat: 36.13072,  lng: -115.08514, tracked: true, group: "Ariana Auto Group", address: "4130 Boulder Hwy, Las Vegas, NV 89121",           website: "https://www.arianamotorslv.com" },
-  { name: "Ariana Motors Nellis",lat: 36.183200, lng: -115.062500, tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110",         website: "https://www.arianamotorsnellis.com" },
   { name: "One Motors LV",       lat: 36.142131, lng: -115.097747, tracked: true, group: "Ariana Auto Group", address: "3535 Boulder Hwy, Las Vegas, NV 89121",           website: "https://www.onemotorslv.com" },
 
   // Tracked competitors
