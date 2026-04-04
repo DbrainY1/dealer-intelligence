@@ -259,7 +259,7 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
                   {col.tooltip ? (
                     <span className="relative group/tip">
                       {col.label}
-                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-2.5 py-1.5 bg-gray-950 border border-gray-700 rounded text-white normal-case tracking-normal font-normal leading-snug pointer-events-none opacity-0 group-hover/tip:opacity-100 transition-opacity z-20 text-left">
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 bg-white text-black text-xs rounded shadow-lg normal-case tracking-normal font-normal leading-snug pointer-events-none opacity-0 group-hover/tip:opacity-100 transition-opacity z-20 text-left">
                         {col.tooltip}
                       </span>
                     </span>
