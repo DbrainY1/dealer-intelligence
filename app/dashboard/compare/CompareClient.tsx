@@ -70,7 +70,7 @@ const COLUMNS: ColDef[] = [
     tooltip: "In Stock ÷ (MTD Sold ÷ Day of Month) — Estimated days until lot is empty at current sales pace.",
   },
   { key: "avgYear",      label: "Avg Year",              width: "w-24", align: "right" },
-  { key: "avgMiles",     label: "Avg Miles",             width: "w-28", align: "right" },
+  { key: "avgMiles",     label: "Avg Miles",             width: "w-28", align: "right", tooltip: "Excludes vehicles with mileage above 300,000. Red values in dealer detail view indicate likely scraper errors." },
   { key: "avgListPrice", label: "Avg List Price",        width: "w-32", align: "right" },
   { key: "totalValue",   label: "Total Inventory Value", width: "w-40", align: "right" },
   {

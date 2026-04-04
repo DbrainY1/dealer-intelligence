@@ -12,7 +12,7 @@ interface InventoryTableProps {
   rows: Row[];
 }
 
-type SortKey = "stock" | "year" | "make" | "model" | "list_price" | "status";
+type SortKey = "stock" | "year" | "make" | "model" | "mileage" | "list_price" | "status";
 
 export default function InventoryTable({ rows }: InventoryTableProps) {
   const router = useRouter();
@@ -46,6 +46,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
     else if (sortKey === "year") { aVal = a.vehicle?.year ?? 0; bVal = b.vehicle?.year ?? 0; }
     else if (sortKey === "make") { aVal = a.vehicle?.make ?? ""; bVal = b.vehicle?.make ?? ""; }
     else if (sortKey === "model") { aVal = a.vehicle?.model ?? ""; bVal = b.vehicle?.model ?? ""; }
+    else if (sortKey === "mileage") { aVal = a.snapshot.mileage ?? 0; bVal = b.snapshot.mileage ?? 0; }
     else if (sortKey === "list_price") { aVal = a.snapshot.list_price ?? 0; bVal = b.snapshot.list_price ?? 0; }
     else if (sortKey === "status") { aVal = a.snapshot.status ?? ""; bVal = b.snapshot.status ?? ""; }
 
@@ -60,6 +61,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
     { key: "year", label: "Year" },
     { key: "make", label: "Make" },
     { key: "model", label: "Model" },
+    { key: "mileage", label: "Miles" },
     { key: "list_price", label: "Price" },
     { key: "status", label: "Status" },
   ];
@@ -99,6 +101,13 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
                 <td className="px-4 py-3">{r.vehicle?.year ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.make ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.model ?? "—"}</td>
+                <td className="px-4 py-3 text-right">
+                  {r.snapshot.mileage != null && r.snapshot.mileage > 0
+                    ? r.snapshot.mileage > 300000
+                      ? <span className="text-red-400">{r.snapshot.mileage.toLocaleString()} ⚠️</span>
+                      : r.snapshot.mileage.toLocaleString()
+                    : "—"}
+                </td>
                 <td className="px-4 py-3">
                   {r.snapshot.list_price != null
                     ? `$${r.snapshot.list_price.toLocaleString()}`
@@ -119,7 +128,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                   No results
                 </td>
               </tr>

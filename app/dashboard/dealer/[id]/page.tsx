@@ -177,7 +177,7 @@ export default async function DealerPage({ params }: PageProps) {
   const validYears = rows.filter((r) => r.vehicle?.year != null && r.vehicle.year > 0).map((r) => r.vehicle!.year as number);
   const avgModelYear = validYears.length > 0 ? Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length) : null;
 
-  const validMiles = latest.filter((s) => s.mileage != null && s.mileage > 0).map((s) => s.mileage as number);
+  const validMiles = latest.filter((s) => s.mileage != null && s.mileage > 0 && s.mileage <= 300000).map((s) => s.mileage as number);
   const avgMileage = validMiles.length > 0 ? Math.round(validMiles.reduce((a, b) => a + b, 0) / validMiles.length) : null;
 
   return (

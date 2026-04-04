@@ -77,7 +77,7 @@ export default async function ComparePage() {
     const totalValue = validPrices.reduce((a, b) => a + b, 0);
 
     const validMiles = ds
-      .filter((s) => s.mileage != null && s.mileage > 0 && s.mileage <= 250000)
+      .filter((s) => s.mileage != null && s.mileage > 0 && s.mileage <= 300000)
       .map((s) => s.mileage as number);
     const avgMiles = validMiles.length > 0
       ? Math.round(validMiles.reduce((a, b) => a + b, 0) / validMiles.length)

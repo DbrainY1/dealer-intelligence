@@ -89,8 +89,13 @@ export default function VehicleEventList({
               <td className="py-2 pr-3 text-white whitespace-nowrap">{e.make ?? "—"}</td>
               <td className="py-2 pr-3 text-gray-300 whitespace-nowrap">{e.model ?? "—"}</td>
               {showMileage && (
-                <td className="py-2 pr-3 text-right text-gray-400 whitespace-nowrap">
-                  {e.mileage ? e.mileage.toLocaleString() : "—"}
+                <td className="py-2 pr-3 text-right whitespace-nowrap">
+                  {e.mileage
+                    ? e.mileage > 300000
+                      ? <span className="text-red-400">{e.mileage.toLocaleString()} ⚠️</span>
+                      : <span className="text-gray-400">{e.mileage.toLocaleString()}</span>
+                    : <span className="text-gray-400">—</span>
+                  }
                 </td>
               )}
               <td className={`py-2 pr-3 text-right whitespace-nowrap ${priceColor}`}>
