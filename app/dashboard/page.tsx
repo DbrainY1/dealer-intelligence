@@ -55,11 +55,11 @@ function IntelCard({
 }) {
   return (
     <div className="bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
-      <div className={`h-1 ${accent}`} />
-      <div className="p-4 space-y-2">
-        <p className="text-gray-500 text-xs font-mono uppercase tracking-widest">{label}</p>
-        <p className="text-white text-3xl font-bold">{primary}</p>
-        <div className="space-y-1 pt-1">
+      <div className={`h-[3px] ${accent}`} />
+      <div className="p-3 space-y-1.5">
+        <p className="text-gray-500 font-mono uppercase tracking-widest" style={{ fontSize: "13px" }}>{label}</p>
+        <p className="text-white text-4xl font-bold">{primary}</p>
+        <div className="space-y-0.5 pt-0.5">
           <p className="text-xs font-mono text-gray-400">
             <span className="text-gray-500">Last mo:</span>{" "}
             {line1Value}{line1Delta ? <> {line1Delta}</> : null}
@@ -269,7 +269,7 @@ export default async function DashboardPage() {
       </h1>
 
       {/* 2×2 Intel Cards */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3 max-w-[900px]">
         <IntelCard
           accent="bg-blue-500"
           label="Active Dealers"
