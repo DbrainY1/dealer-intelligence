@@ -1,9 +1,127 @@
 export const dynamic = "force-dynamic";
 
 import { createServerSupabase } from "@/lib/supabase-server";
-import KPICard from "@/components/KPICard";
 import type { Dealer } from "@/types";
 import MarketCharts from "./MarketCharts";
+import type { ReactNode } from "react";
+
+// ── Local UI helpers ──────────────────────────────────────────────────────────
+
+function Delta({
+  current,
+  prior,
+  type,
+}: {
+  current: number | null;
+  prior: number | null;
+  type: "count" | "price" | "pct";
+}): ReactNode {
+  if (current === null || prior === null) return null;
+  const diff = current - prior;
+  const arrow = diff >= 0 ? "↑" : "↓";
+  const color =
+    diff > 0 ? "text-green-400" : diff < 0 ? "text-red-400" : "text-amber-400";
+  let diffStr: string;
+  if (type === "price") {
+    diffStr = `${diff >= 0 ? "+$" : "-$"}${Math.abs(Math.round(diff)).toLocaleString()}`;
+  } else if (type === "pct") {
+    diffStr = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pp`;
+  } else {
+    diffStr = `${diff >= 0 ? "+" : ""}${diff}`;
+  }
+  return <span className={color}>{arrow} {diffStr}</span>;
+}
+
+function IntelCard({
+  accent,
+  label,
+  primary,
+  line1Label,
+  line1Value,
+  line1Delta,
+  line2Label,
+  line2Value,
+  line2Delta,
+}: {
+  accent: string;
+  label: string;
+  primary: string;
+  line1Label: string;
+  line1Value: string;
+  line1Delta: ReactNode;
+  line2Label: string;
+  line2Value: string;
+  line2Delta: ReactNode;
+}) {
+  return (
+    <div className="bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
+      <div className={`h-1 ${accent}`} />
+      <div className="p-4 space-y-2">
+        <p className="text-gray-500 text-xs font-mono uppercase tracking-widest">{label}</p>
+        <p className="text-white text-3xl font-bold">{primary}</p>
+        <div className="space-y-1 pt-1">
+          <p className="text-xs font-mono text-gray-400">
+            <span className="text-gray-500">Last mo:</span>{" "}
+            {line1Value}{line1Delta ? <> {line1Delta}</> : null}
+          </p>
+          <p className="text-xs font-mono text-gray-400">
+            <span className="text-gray-500">Last yr:</span>{" "}
+            {line2Value}{line2Delta ? <> {line2Delta}</> : null}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Comparison snapshot helper ────────────────────────────────────────────────
+
+async function getSnapshotStats(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  cutoffStr: string
+): Promise<{ activeDealers: number; inventory: number; avgPrice: number | null } | null> {
+  const { data: dateRow } = await supabase
+    .from("inventory_snapshots")
+    .select("snapshot_date")
+    .lte("snapshot_date", cutoffStr)
+    .order("snapshot_date", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!dateRow) return null;
+
+  const snapDate = dateRow.snapshot_date;
+
+  const [dealerRes, countRes, priceRes] = await Promise.all([
+    supabase
+      .from("inventory_snapshots")
+      .select("dealer_id")
+      .eq("snapshot_date", snapDate),
+    supabase
+      .from("inventory_snapshots")
+      .select("id", { count: "exact", head: true })
+      .eq("snapshot_date", snapDate),
+    supabase
+      .from("inventory_snapshots")
+      .select("list_price")
+      .eq("snapshot_date", snapDate)
+      .not("list_price", "is", null),
+  ]);
+
+  const activeDealers = new Set(
+    (dealerRes.data ?? []).map((r: { dealer_id: number }) => r.dealer_id)
+  ).size;
+  const inventory = countRes.count ?? 0;
+  const prices = (priceRes.data ?? []) as { list_price: number }[];
+  const avgPrice =
+    prices.length > 0
+      ? Math.round(prices.reduce((s, r) => s + r.list_price, 0) / prices.length)
+      : null;
+
+  return { activeDealers, inventory, avgPrice };
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
@@ -11,16 +129,41 @@ export default async function DashboardPage() {
   const { data: dealers } = await supabase.from("dealers").select("*");
   const dealerList: Dealer[] = dealers ?? [];
 
-  // Monthly sold counts from monthly_sales table
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  const { data: monthlySales } = await supabase
-    .from("monthly_sales")
-    .select("dealer_id, units_sold")
-    .eq("month_start", monthStart.toISOString().split("T")[0]);
-  const soldByDealer = new Map((monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [r.dealer_id, r.units_sold ?? 0]));
+  // Dynamic date anchors
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthStartStr = monthStart.toISOString().split("T")[0];
 
-  // Per-dealer: get latest snapshot date, then count for that date
+  const lastMoCutoff = new Date(today);
+  lastMoCutoff.setMonth(lastMoCutoff.getMonth() - 1);
+  const lastMoCutoffStr = lastMoCutoff.toISOString().split("T")[0];
+
+  const lastMoMonthStart = new Date(lastMoCutoff.getFullYear(), lastMoCutoff.getMonth(), 1);
+  const lastMoMonthStartStr = lastMoMonthStart.toISOString().split("T")[0];
+
+  const lastYrCutoff = new Date(today);
+  lastYrCutoff.setFullYear(lastYrCutoff.getFullYear() - 1);
+  const lastYrCutoffStr = lastYrCutoff.toISOString().split("T")[0];
+
+  const lastYrMonthStart = new Date(lastYrCutoff.getFullYear(), lastYrCutoff.getMonth(), 1);
+  const lastYrMonthStartStr = lastYrMonthStart.toISOString().split("T")[0];
+
+  // Monthly sold counts — current + comparison months
+  const { data: allMonthlySales } = await supabase
+    .from("monthly_sales")
+    .select("dealer_id, units_sold, month_start")
+    .in("month_start", [monthStartStr, lastMoMonthStartStr, lastYrMonthStartStr]);
+
+  const sumSoldForMonth = (ms: string) =>
+    (allMonthlySales ?? [])
+      .filter((r: { month_start: string; units_sold: number }) => r.month_start === ms)
+      .reduce((s: number, r: { units_sold: number }) => s + (r.units_sold ?? 0), 0);
+
+  const soldThisMonth = sumSoldForMonth(monthStartStr);
+  const soldLastMo = sumSoldForMonth(lastMoMonthStartStr);
+  const soldLastYr = sumSoldForMonth(lastYrMonthStartStr);
+
+  // Per-dealer today: latest snapshot count + avg price
   const byDealer = await Promise.all(
     dealerList.map(async (d) => {
       const { data: latestDate } = await supabase
@@ -31,7 +174,7 @@ export default async function DashboardPage() {
         .limit(1)
         .single();
 
-      if (!latestDate) return { name: d.name, count: 0, sold: soldByDealer.get(d.id) ?? 0 };
+      if (!latestDate) return { name: d.name, count: 0, sold: 0 };
 
       const { count } = await supabase
         .from("inventory_snapshots")
@@ -39,13 +182,23 @@ export default async function DashboardPage() {
         .eq("dealer_id", d.id)
         .eq("snapshot_date", latestDate.snapshot_date);
 
-      return { name: d.name, count: count ?? 0, sold: soldByDealer.get(d.id) ?? 0 };
+      const soldByDealer = (allMonthlySales ?? []).find(
+        (r: { dealer_id: number; month_start: string }) =>
+          r.dealer_id === d.id && r.month_start === monthStartStr
+      );
+
+      return {
+        name: d.name,
+        count: count ?? 0,
+        sold: soldByDealer?.units_sold ?? 0,
+      };
     })
   );
 
+  const activeDealersToday = byDealer.filter((d) => d.count > 0).length;
   const totalInventory = byDealer.reduce((sum, d) => sum + d.count, 0);
 
-  // Avg price: per dealer from latest snapshot, exclude nulls
+  // Avg price today
   let totalPriceSum = 0;
   let totalPriceCount = 0;
   await Promise.all(
@@ -72,17 +225,116 @@ export default async function DashboardPage() {
   );
   const avgPrice = totalPriceCount > 0 ? Math.round(totalPriceSum / totalPriceCount) : 0;
 
-  // Total units sold this month (sum across all dealers)
-  const estimatedSold = Array.from(soldByDealer.values()).reduce((sum, v) => sum + v, 0);
+  // Sell-through today
+  const sellThroughToday =
+    totalInventory > 0 ? (soldThisMonth / totalInventory) * 100 : null;
+
+  // Comparison snapshot stats (parallel)
+  const [lastMoStats, lastYrStats] = await Promise.all([
+    getSnapshotStats(supabase, lastMoCutoffStr),
+    getSnapshotStats(supabase, lastYrCutoffStr),
+  ]);
+
+  // Sell-through for comparison periods
+  const sellThroughLastMo =
+    lastMoStats && lastMoStats.inventory > 0 && soldLastMo > 0
+      ? (soldLastMo / lastMoStats.inventory) * 100
+      : lastMoStats
+      ? null
+      : null;
+
+  const sellThroughLastYr =
+    lastYrStats && lastYrStats.inventory > 0 && soldLastYr > 0
+      ? (soldLastYr / lastYrStats.inventory) * 100
+      : lastYrStats
+      ? null
+      : null;
+
+  // Format helpers
+  const fmtCount = (v: number | null) => (v === null ? "N/A" : v.toLocaleString());
+  const fmtPrice = (v: number | null) =>
+    v === null ? "N/A" : `$${v.toLocaleString()}`;
+  const fmtPct = (v: number | null) => (v === null ? "N/A" : `${v.toFixed(1)}%`);
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-white text-xl font-bold">Market Overview — {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" })}</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KPICard label="Total Market Inventory" value={totalInventory.toLocaleString()} trend="neutral" />
-        <KPICard label="Avg List Price" value={`$${avgPrice.toLocaleString()}`} trend="neutral" />
-        <KPICard label="Units Sold (This Month)" value={estimatedSold.toLocaleString()} trend="up" trendValue="Current month" />
+      <h1 className="text-white text-xl font-bold">
+        Market Overview —{" "}
+        {today.toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "America/Los_Angeles",
+        })}
+      </h1>
+
+      {/* 2×2 Intel Cards */}
+      <div className="grid grid-cols-2 gap-4">
+        <IntelCard
+          accent="bg-blue-500"
+          label="Active Dealers"
+          primary={activeDealersToday.toString()}
+          line1Label="Last mo"
+          line1Value={fmtCount(lastMoStats?.activeDealers ?? null)}
+          line1Delta={
+            <Delta current={activeDealersToday} prior={lastMoStats?.activeDealers ?? null} type="count" />
+          }
+          line2Label="Last yr"
+          line2Value={fmtCount(lastYrStats?.activeDealers ?? null)}
+          line2Delta={
+            <Delta current={activeDealersToday} prior={lastYrStats?.activeDealers ?? null} type="count" />
+          }
+        />
+
+        <IntelCard
+          accent="bg-violet-500"
+          label="Inventory Level"
+          primary={totalInventory.toLocaleString()}
+          line1Label="Last mo"
+          line1Value={fmtCount(lastMoStats?.inventory ?? null)}
+          line1Delta={
+            <Delta current={totalInventory} prior={lastMoStats?.inventory ?? null} type="count" />
+          }
+          line2Label="Last yr"
+          line2Value={fmtCount(lastYrStats?.inventory ?? null)}
+          line2Delta={
+            <Delta current={totalInventory} prior={lastYrStats?.inventory ?? null} type="count" />
+          }
+        />
+
+        <IntelCard
+          accent="bg-emerald-500"
+          label="Avg List Price"
+          primary={`$${avgPrice.toLocaleString()}`}
+          line1Label="Last mo"
+          line1Value={fmtPrice(lastMoStats?.avgPrice ?? null)}
+          line1Delta={
+            <Delta current={avgPrice} prior={lastMoStats?.avgPrice ?? null} type="price" />
+          }
+          line2Label="Last yr"
+          line2Value={fmtPrice(lastYrStats?.avgPrice ?? null)}
+          line2Delta={
+            <Delta current={avgPrice} prior={lastYrStats?.avgPrice ?? null} type="price" />
+          }
+        />
+
+        <IntelCard
+          accent="bg-amber-500"
+          label="Sell-Through Pace"
+          primary={fmtPct(sellThroughToday)}
+          line1Label="Last mo"
+          line1Value={fmtPct(sellThroughLastMo)}
+          line1Delta={
+            <Delta current={sellThroughToday} prior={sellThroughLastMo} type="pct" />
+          }
+          line2Label="Last yr"
+          line2Value={fmtPct(sellThroughLastYr)}
+          line2Delta={
+            <Delta current={sellThroughToday} prior={sellThroughLastYr} type="pct" />
+          }
+        />
       </div>
+
       <MarketCharts byDealer={byDealer} dealers={dealerList} />
     </div>
   );
