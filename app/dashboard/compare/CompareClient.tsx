@@ -109,6 +109,11 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
     });
   }, [dealerStats, selected, sortCol, sortDir]);
 
+  const marketAvgSellThrough = useMemo(() => {
+    if (selectedStats.length === 0) return 0;
+    return selectedStats.reduce((sum, s) => sum + s.sellThrough, 0) / selectedStats.length;
+  }, [selectedStats]);
+
   // Trend chart data
   const dateSet = new Set<string>();
   for (const s of trendSnapshots ?? []) dateSet.add(s.snapshot_date.slice(0, 10));
@@ -224,18 +229,23 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
                     }`}
                     style={{ borderLeft: `3px solid ${accent ?? "transparent"}` }}
                   >
-                    {COLUMNS.map((col) => (
-                      <div
-                        key={col.key}
-                        className={`${col.width} flex-shrink-0 px-2 text-sm ${
-                          col.key === "name"
-                            ? "text-white font-bold truncate"
-                            : "text-gray-200 text-right"
-                        }`}
-                      >
-                        {formatCell(col.key, stat)}
-                      </div>
-                    ))}
+                    {COLUMNS.map((col) => {
+                      let colorClass = "text-gray-200 text-right";
+                      if (col.key === "name") {
+                        colorClass = "text-white font-bold truncate";
+                      } else if (col.key === "avgMiles" && stat.avgMiles != null && stat.avgMiles > 150000) {
+                        colorClass = "text-amber-400 text-right";
+                      } else if (col.key === "sellThrough") {
+                        if (stat.sellThrough === 0) colorClass = "text-gray-500 text-right";
+                        else if (stat.sellThrough >= marketAvgSellThrough) colorClass = "text-green-400 text-right";
+                        else colorClass = "text-red-400 text-right";
+                      }
+                      return (
+                        <div key={col.key} className={`${col.width} flex-shrink-0 px-2 text-sm ${colorClass}`}>
+                          {formatCell(col.key, stat)}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}

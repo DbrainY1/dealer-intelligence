@@ -67,7 +67,7 @@ export default async function ComparePage() {
     const sellThrough = inStock > 0 ? (mtdSold / inStock) * 100 : 0;
 
     const validPrices = ds
-      .filter((s) => s.list_price != null && s.list_price > 0)
+      .filter((s) => s.list_price != null && s.list_price > 500)
       .map((s) => s.list_price as number);
     const avgListPrice = validPrices.length > 0
       ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length)
@@ -75,15 +75,16 @@ export default async function ComparePage() {
     const totalValue = validPrices.reduce((a, b) => a + b, 0);
 
     const validMiles = ds
-      .filter((s) => s.mileage != null && s.mileage > 0)
+      .filter((s) => s.mileage != null && s.mileage > 0 && s.mileage <= 250000)
       .map((s) => s.mileage as number);
     const avgMiles = validMiles.length > 0
       ? Math.round(validMiles.reduce((a, b) => a + b, 0) / validMiles.length)
       : null;
 
+    const currentYear = new Date().getFullYear();
     const validYears = ds
       .map((s) => vehicleYearMap.get(s.vehicle_id))
-      .filter((y): y is number => y != null && y > 0);
+      .filter((y): y is number => y != null && y >= 1990 && y <= currentYear + 1);
     const avgYear = validYears.length > 0
       ? Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length)
       : null;
