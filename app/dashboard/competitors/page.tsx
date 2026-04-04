@@ -70,9 +70,19 @@ export default async function CompetitorsPage() {
       .limit(1)
       .single();
 
-    if (!latest) return { dealer: d, count: 0, avg: 0, sold: 0, added: 0, removed: 0 };
+    if (!latest) return { dealer: d, count: 0, avg: 0, sold: 0, added: null, removed: null };
 
-    const [{ count }, { data: snaps }, { data: todayVids }, { data: yesterdayVids }] = await Promise.all([
+    // Get the most recent snapshot date strictly before today's
+    const { data: priorDateData } = await supabase
+      .from("inventory_snapshots")
+      .select("snapshot_date")
+      .eq("dealer_id", d.id)
+      .lt("snapshot_date", latest.snapshot_date)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .single();
+
+    const [{ count }, { data: snaps }, { data: todayVids }, { data: priorVids }] = await Promise.all([
       supabase
         .from("inventory_snapshots")
         .select("id", { count: "exact" })
@@ -89,19 +99,26 @@ export default async function CompetitorsPage() {
         .select("vehicle_id")
         .eq("dealer_id", d.id)
         .eq("snapshot_date", latest.snapshot_date),
-      supabase
-        .from("inventory_snapshots")
-        .select("vehicle_id")
-        .eq("dealer_id", d.id)
-        .eq("snapshot_date", yesterdayStr),
+      priorDateData
+        ? supabase
+            .from("inventory_snapshots")
+            .select("vehicle_id")
+            .eq("dealer_id", d.id)
+            .eq("snapshot_date", priorDateData.snapshot_date)
+        : Promise.resolve({ data: null }),
     ]);
 
     const priced = snaps ?? [];
     const avg = priced.length ? Math.round(priced.reduce((s, r) => s + (r.list_price ?? 0), 0) / priced.length) : 0;
-    const todaySet = new Set((todayVids ?? []).map((r) => r.vehicle_id));
-    const oldSet = new Set((yesterdayVids ?? []).map((r) => r.vehicle_id));
-    const added = oldSet.size > 0 ? [...todaySet].filter((id) => !oldSet.has(id)).length : 0;
-    const removed = oldSet.size > 0 ? [...oldSet].filter((id) => !todaySet.has(id)).length : 0;
+
+    let added: number | null = null;
+    let removed: number | null = null;
+    if (priorDateData && priorVids) {
+      const todaySet = new Set((todayVids ?? []).map((r) => r.vehicle_id));
+      const priorSet = new Set(priorVids.map((r: { vehicle_id: number }) => r.vehicle_id));
+      added = [...todaySet].filter((id) => !priorSet.has(id)).length;
+      removed = [...priorSet].filter((id) => !todaySet.has(id)).length;
+    }
 
     return {
       dealer: d,

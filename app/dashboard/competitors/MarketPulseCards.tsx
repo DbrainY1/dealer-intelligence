@@ -22,8 +22,8 @@ export interface ScorecardRow {
   name: string;
   count: number;
   sold: number;
-  added: number;
-  removed: number;
+  added: number | null;
+  removed: number | null;
 }
 
 function SortableCard({
@@ -90,11 +90,15 @@ function SortableCard({
 
         <div className="flex justify-between border-t border-gray-800 pt-2 text-xs">
           <div className="flex items-center gap-1">
-            <span className="text-green-300 font-semibold">↑ {row.added}</span>
+            {row.added === null
+              ? <span className="text-gray-500 font-semibold">N/A</span>
+              : <span className="text-green-300 font-semibold">↑ {row.added}</span>}
             <span className="text-gray-500">added</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-red-300 font-semibold">↓ {row.removed}</span>
+            {row.removed === null
+              ? <span className="text-gray-500 font-semibold">N/A</span>
+              : <span className="text-red-300 font-semibold">↓ {row.removed}</span>}
             <span className="text-gray-500">removed</span>
           </div>
         </div>
