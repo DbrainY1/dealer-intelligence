@@ -27,7 +27,7 @@ const DEALERS: Dealer[] = [
   { name: "Boktors",             lat: 36.10010,  lng: -115.12265, tracked: true, address: "1610 E Tropicana Ave, Las Vegas, NV 89119",      website: "https://www.boktors.com" },
   { name: "Globul Enterprises",  lat: 36.12269,  lng: -115.18959, tracked: true, address: "3720 S Valley View Blvd, Las Vegas, NV 89103",   website: "https://www.globulenterprises.com" },
   { name: "Platinum Cars LV",    lat: 36.14400,  lng: -115.09831, tracked: true, address: "3497 Boulder Hwy, Las Vegas, NV 89121",           website: "https://www.platinumcarslv.com" },
-  { name: "Queen Motorcars",     lat: 36.15436,  lng: -115.10911, tracked: true, address: "2925 E Fremont St, Las Vegas, NV 89104",          website: "https://www.queenmotorcars.com" },
+  { name: "Queen Motorcars",     lat: 36.154688, lng: -115.110070, tracked: true, address: "2925 E Fremont St, Las Vegas, NV 89104",          website: "https://www.queenmotorcars.com" },
   { name: "Auto Vision LV",      lat: 36.15229,  lng: -115.10936, tracked: true, address: "3020 E Fremont St, Las Vegas, NV 89104",          website: "https://www.autovisionlv.com" },
   { name: "Charlie Cheap Car",   lat: 36.144680, lng: -115.208592, tracked: true, address: "5015 W Sahara Ave #127, Las Vegas, NV 89146",     website: "https://www.charliecheapcar.com" },
   { name: "Hot Deals Auto",      lat: 36.12800,  lng: -115.20850, tracked: true, address: "3401 S Decatur Blvd, Las Vegas, NV 89102",          website: "https://www.hotdealsauto.com" },
