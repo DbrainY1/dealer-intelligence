@@ -6,7 +6,7 @@ import CompetitorCharts from "./CompetitorCharts";
 import MarketPulseCards from "./MarketPulseCards";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
-const COMPETITOR_NAMES = ["Baja", "Newport", "Ariana", "Auto Vision", "Boktors", "Charlie", "Globul", "Hot Deals", "One Motors", "Platinum", "Queen", "Nellis", "RevEuro"];
+const COMPETITOR_NAMES = ["Baja", "Newport", "Ariana", "Auto Vision", "Boktors", "Charlie", "Emporio", "Globul", "Hot Deals", "One Motors", "Platinum", "Queen", "Nellis", "RevEuro"];
 
 export default async function CompetitorsPage() {
   const supabase = await createServerSupabase();
