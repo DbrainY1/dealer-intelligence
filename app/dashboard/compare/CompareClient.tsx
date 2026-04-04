@@ -19,13 +19,23 @@ export interface DealerStat {
   inStock: number;
   mtdSold: number;
   sellThrough: number;
+  daysOfSupply: number | null;
   avgYear: number | null;
   avgMiles: number | null;
   avgListPrice: number | null;
   totalValue: number;
 }
 
-type SortKey = Exclude<keyof DealerStat, "id">;
+type ExtendedStat = DealerStat & { ppi: number | null };
+type SortKey = Exclude<keyof ExtendedStat, "id">;
+
+interface ColDef {
+  key: SortKey;
+  label: string;
+  width: string;
+  align: "left" | "right";
+  tooltip?: string;
+}
 
 interface Props {
   dealers: Dealer[];
@@ -41,15 +51,35 @@ const OWN_DEALERS: { match: string; color: string }[] = [
   { match: "newport motors", color: "#f59e0b" },
 ];
 
-const COLUMNS: { key: SortKey; label: string; width: string; align: "left" | "right" }[] = [
+const COLUMNS: ColDef[] = [
   { key: "name",         label: "Dealer",                width: "w-44", align: "left"  },
   { key: "inStock",      label: "In Stock",              width: "w-24", align: "right" },
   { key: "mtdSold",      label: "MTD Sold",              width: "w-24", align: "right" },
-  { key: "sellThrough",  label: "Sell-Through",          width: "w-28", align: "right" },
+  {
+    key: "sellThrough",
+    label: "Sell-Through",
+    width: "w-28",
+    align: "right",
+    tooltip: "MTD Sold ÷ In Stock — Percentage of inventory sold so far this month. Higher is better. Color reflects performance vs market average of all selected dealers.",
+  },
+  {
+    key: "daysOfSupply",
+    label: "Days of Supply",
+    width: "w-32",
+    align: "right",
+    tooltip: "In Stock ÷ (MTD Sold ÷ Day of Month) — Estimated days until lot is empty at current sales pace.",
+  },
   { key: "avgYear",      label: "Avg Year",              width: "w-24", align: "right" },
   { key: "avgMiles",     label: "Avg Miles",             width: "w-28", align: "right" },
   { key: "avgListPrice", label: "Avg List Price",        width: "w-32", align: "right" },
   { key: "totalValue",   label: "Total Inventory Value", width: "w-40", align: "right" },
+  {
+    key: "ppi",
+    label: "PPI",
+    width: "w-20",
+    align: "right",
+    tooltip: "(Dealer Avg Price ÷ Market Avg Price) × 100 — Above 110 means priced above market. Below 95 means priced below market.",
+  },
 ];
 
 function getAccentColor(name: string): string | null {
@@ -57,16 +87,18 @@ function getAccentColor(name: string): string | null {
   return OWN_DEALERS.find((o) => lower.includes(o.match))?.color ?? null;
 }
 
-function formatCell(key: SortKey, stat: DealerStat): string {
+function formatCell(key: SortKey, stat: ExtendedStat): string {
   switch (key) {
     case "name":         return stat.name;
     case "inStock":      return stat.inStock.toLocaleString();
     case "mtdSold":      return stat.mtdSold.toLocaleString();
     case "sellThrough":  return `${stat.sellThrough.toFixed(1)}%`;
+    case "daysOfSupply": return stat.daysOfSupply != null ? String(stat.daysOfSupply) : "∞";
     case "avgYear":      return stat.avgYear != null ? String(stat.avgYear) : "N/A";
     case "avgMiles":     return stat.avgMiles != null ? stat.avgMiles.toLocaleString() : "N/A";
     case "avgListPrice": return stat.avgListPrice != null ? `$${stat.avgListPrice.toLocaleString()}` : "N/A";
     case "totalValue":   return `$${stat.totalValue.toLocaleString()}`;
+    case "ppi":          return stat.ppi != null ? String(stat.ppi) : "N/A";
   }
 }
 
@@ -94,10 +126,25 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
     }
   };
 
-  const selectedStats = useMemo(() => {
-    const stats = dealerStats.filter((s) => selected.includes(s.id));
-    if (!sortCol) return stats;
-    return [...stats].sort((a, b) => {
+  const selectedStats = useMemo((): ExtendedStat[] => {
+    const base = dealerStats.filter((s) => selected.includes(s.id));
+
+    // Market avg list price (exclude nulls) for PPI
+    const priced = base.filter((s) => s.avgListPrice != null);
+    const marketAvgListPrice = priced.length > 0
+      ? priced.reduce((sum, s) => sum + s.avgListPrice!, 0) / priced.length
+      : 0;
+
+    const extended: ExtendedStat[] = base.map((s) => ({
+      ...s,
+      ppi: s.avgListPrice != null && marketAvgListPrice > 0
+        ? Math.round((s.avgListPrice / marketAvgListPrice) * 100)
+        : null,
+    }));
+
+    if (!sortCol) return extended;
+
+    return [...extended].sort((a, b) => {
       const aVal = a[sortCol];
       const bVal = b[sortCol];
       if (aVal == null && bVal == null) return 0;
@@ -209,7 +256,16 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
                     col.align === "right" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  {col.label}
+                  {col.tooltip ? (
+                    <span className="relative group/tip">
+                      {col.label}
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-2.5 py-1.5 bg-gray-950 border border-gray-700 rounded text-white normal-case tracking-normal font-normal leading-snug pointer-events-none opacity-0 group-hover/tip:opacity-100 transition-opacity z-20 text-left">
+                        {col.tooltip}
+                      </span>
+                    </span>
+                  ) : (
+                    col.label
+                  )}
                   {sortCol === col.key && (
                     <span className="text-blue-400">{sortDir === "asc" ? "↑" : "↓"}</span>
                   )}
@@ -231,6 +287,7 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
                   >
                     {COLUMNS.map((col) => {
                       let colorClass = "text-gray-200 text-right";
+
                       if (col.key === "name") {
                         colorClass = "text-white font-bold truncate";
                       } else if (col.key === "avgMiles" && stat.avgMiles != null && stat.avgMiles > 150000) {
@@ -239,7 +296,19 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
                         if (stat.sellThrough === 0) colorClass = "text-gray-500 text-right";
                         else if (stat.sellThrough >= marketAvgSellThrough) colorClass = "text-green-400 text-right";
                         else colorClass = "text-red-400 text-right";
+                      } else if (col.key === "daysOfSupply") {
+                        if (stat.daysOfSupply == null) colorClass = "text-gray-400 text-right"; // ∞
+                        else if (stat.daysOfSupply < 30)  colorClass = "text-blue-400 text-right";
+                        else if (stat.daysOfSupply <= 60) colorClass = "text-green-400 text-right";
+                        else if (stat.daysOfSupply <= 90) colorClass = "text-amber-400 text-right";
+                        else                              colorClass = "text-red-400 text-right";
+                      } else if (col.key === "ppi") {
+                        if (stat.ppi == null)       colorClass = "text-gray-400 text-right";
+                        else if (stat.ppi > 110)    colorClass = "text-red-400 text-right";
+                        else if (stat.ppi < 95)     colorClass = "text-green-400 text-right";
+                        else                        colorClass = "text-white text-right";
                       }
+
                       return (
                         <div key={col.key} className={`${col.width} flex-shrink-0 px-2 text-sm ${colorClass}`}>
                           {formatCell(col.key, stat)}

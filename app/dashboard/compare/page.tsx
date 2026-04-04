@@ -58,13 +58,15 @@ export default async function ComparePage() {
     (monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [r.dealer_id, r.units_sold ?? 0])
   );
 
-  // Pre-compute all 8 metrics per dealer
+  // Pre-compute all metrics per dealer
+  const dayOfMonth = new Date().getDate();
   const dealerStats: DealerStat[] = dealerList.map((d) => {
     const ds = allSnapshots.filter((s) => s.dealer_id === d.id && s.status === "active");
 
     const inStock = ds.length;
     const mtdSold = soldByDealer.get(d.id) ?? 0;
     const sellThrough = inStock > 0 ? (mtdSold / inStock) * 100 : 0;
+    const daysOfSupply = mtdSold > 0 ? Math.round((inStock * dayOfMonth) / mtdSold) : null;
 
     const validPrices = ds
       .filter((s) => s.list_price != null && s.list_price > 500)
@@ -89,7 +91,7 @@ export default async function ComparePage() {
       ? Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length)
       : null;
 
-    return { id: d.id, name: d.name, inStock, mtdSold, sellThrough, avgYear, avgMiles, avgListPrice, totalValue };
+    return { id: d.id, name: d.name, inStock, mtdSold, sellThrough, daysOfSupply, avgYear, avgMiles, avgListPrice, totalValue };
   });
 
   // Fetch last 30 days trend data per dealer for the chart
