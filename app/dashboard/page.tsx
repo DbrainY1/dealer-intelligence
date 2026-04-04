@@ -57,7 +57,7 @@ function IntelCard({
     <div className="bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
       <div className={`h-[3px] ${accent}`} />
       <div className="p-3 space-y-1.5">
-        <p className="text-gray-500 text-4xl font-mono uppercase tracking-widest">{label}</p>
+        <p className="text-white text-4xl font-bold uppercase tracking-widest">{label}</p>
         <p className="text-white text-4xl font-bold">{primary}</p>
         <div className="space-y-0.5 pt-0.5">
           <p className="text-sm font-mono text-gray-400">
