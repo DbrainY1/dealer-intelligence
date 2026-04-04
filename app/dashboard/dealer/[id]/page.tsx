@@ -170,6 +170,16 @@ export default async function DealerPage({ params }: PageProps) {
     }
   }
 
+  // ── In-stock summary metrics ─────────────────────────────────────
+  const validPrices = latest.filter((s) => s.list_price != null && s.list_price > 0).map((s) => s.list_price as number);
+  const avgListPrice = validPrices.length > 0 ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length) : null;
+
+  const validYears = rows.filter((r) => r.vehicle?.year != null && r.vehicle.year > 0).map((r) => r.vehicle!.year as number);
+  const avgModelYear = validYears.length > 0 ? Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length) : null;
+
+  const validMiles = latest.filter((s) => s.mileage != null && s.mileage > 0).map((s) => s.mileage as number);
+  const avgMileage = validMiles.length > 0 ? Math.round(validMiles.reduce((a, b) => a + b, 0) / validMiles.length) : null;
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -189,8 +199,30 @@ export default async function DealerPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TrendChart data={trendData} label="Inventory Count (Last 30 Days)" color="#3b82f6" />
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <p className="text-gray-400 text-sm mb-1">Currently In Stock</p>
-          <p className="text-white text-3xl font-bold">{latest.length}</p>
+          <div className="grid grid-cols-2 gap-4 h-full">
+            <div>
+              <p className="text-gray-400 text-xs mb-1">Currently In Stock</p>
+              <p className="text-white text-3xl font-bold">{latest.length}</p>
+            </div>
+            <div>
+              <p className="text-gray-400 text-xs mb-1">Average Price</p>
+              <p className="text-white text-3xl font-bold">
+                {avgListPrice != null ? `$${avgListPrice.toLocaleString()}` : "N/A"}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-400 text-xs mb-1">Average Year</p>
+              <p className="text-white text-3xl font-bold">
+                {avgModelYear != null ? avgModelYear.toString() : "N/A"}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-400 text-xs mb-1">Average Miles</p>
+              <p className="text-white text-3xl font-bold">
+                {avgMileage != null ? avgMileage.toLocaleString() : "N/A"}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
