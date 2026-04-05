@@ -116,7 +116,12 @@ function SortableCard({
 
 const STORAGE_KEY = "market-pulse-order";
 
-export default function MarketPulseCards({ scorecards }: { scorecards: ScorecardRow[] }) {
+interface MarketPulseCardsProps {
+  scorecards: ScorecardRow[];
+  onSelectionChange?: (selectedIds: Set<number>) => void;
+}
+
+export default function MarketPulseCards({ scorecards, onSelectionChange }: MarketPulseCardsProps) {
   const allIds = scorecards.map((s) => s.id);
   const [selected, setSelected] = useState<Set<number>>(new Set(allIds));
   const [order, setOrder] = useState<number[]>(allIds);
@@ -145,11 +150,21 @@ export default function MarketPulseCards({ scorecards }: { scorecards: Scorecard
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
+      onSelectionChange?.(next);
       return next;
     });
 
-  const selectAll = () => setSelected(new Set(allIds));
-  const clear = () => setSelected(new Set());
+  const selectAll = () => {
+    const all = new Set(allIds);
+    onSelectionChange?.(all);
+    setSelected(all);
+  };
+
+  const clear = () => {
+    const empty = new Set<number>();
+    onSelectionChange?.(empty);
+    setSelected(empty);
+  };
 
   const exportCSV = () => {
     const rows = sorted.filter((s) => selected.has(s.id));
