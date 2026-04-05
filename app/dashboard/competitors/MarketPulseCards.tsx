@@ -16,6 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import PriceSparkline from "@/components/PriceSparkline";
 
 export interface ScorecardRow {
   id: number;
@@ -86,6 +87,12 @@ function SortableCard({
             <p className="text-2xl font-bold text-green-400">{row.sold}</p>
             <p className="text-gray-500 text-xs">MTD sold</p>
           </div>
+        </div>
+
+        {/* Price Sparkline — 7-day trend */}
+        <div className="my-2" onClick={(e) => e.stopPropagation()}>
+          <p className="text-xs text-gray-500 mb-1">7-day avg price</p>
+          <PriceSparkline dealerId={row.id} />
         </div>
 
         <div className="flex justify-between border-t border-gray-800 pt-2 text-xs">
