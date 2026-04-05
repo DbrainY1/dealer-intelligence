@@ -60,21 +60,23 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
       onClick={onClose}
     >
       <div
-        className="bg-orange-950/30 border-2 border-orange-500 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-orange-950/30 border-2 border-orange-500 rounded-lg max-w-4xl w-full max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-orange-950/40 border-b-2 border-orange-500 p-3 flex items-start justify-between gap-4">
+        <div className="sticky top-0 bg-orange-950/40 border-b-2 border-orange-500 p-4 flex items-start justify-between gap-4">
           <div className="flex-1">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-orange-300 font-bold">{vehicle.year}</span>
-              <span className="text-orange-200">{vehicle.make}</span>
-              <span className="text-orange-200">{vehicle.model}</span>
+            <div className="flex items-baseline gap-3 flex-wrap mb-2">
+              <span className="text-orange-300 font-bold text-lg">{vehicle.year}</span>
+              <span className="text-orange-200 text-lg font-semibold">{vehicle.make}</span>
+              <span className="text-orange-200 text-lg font-semibold">{vehicle.model}</span>
               {vehicle.mileage && (
-                <span className="text-orange-200 text-xs">({vehicle.mileage.toLocaleString()} mi)</span>
+                <span className="text-orange-300 text-sm font-semibold">
+                  {vehicle.mileage.toLocaleString()} mi
+                </span>
               )}
             </div>
-            <p className="text-orange-100 text-xs mt-1">VID-{vehicleId}</p>
+            <p className="text-orange-100 text-sm">VID-{vehicleId}</p>
           </div>
           <button
             onClick={onClose}
