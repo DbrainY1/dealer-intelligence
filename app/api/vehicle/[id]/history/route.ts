@@ -29,7 +29,7 @@ export async function GET(
     // Fetch vehicle details
     const { data: vehicle, error: vehicleError } = await supabase
       .from("vehicles")
-      .select("year, make, model, mileage, vin")
+      .select("year, make, model, vin")
       .eq("id", vehicleId)
       .limit(1)
       .single();
@@ -38,10 +38,26 @@ export async function GET(
       console.error("Vehicle lookup error:", vehicleError);
     }
 
+    // Try to get mileage from latest snapshot
+    let mileage = null;
+    if (vehicle) {
+      const { data: snapshot } = await supabase
+        .from("inventory_snapshots")
+        .select("mileage")
+        .eq("vehicle_id", vehicleId)
+        .not("mileage", "is", null)
+        .order("snapshot_date", { ascending: false })
+        .limit(1)
+        .single();
+      if (snapshot) {
+        mileage = snapshot.mileage;
+      }
+    }
+
     return Response.json(
       {
         events: events || [],
-        vehicle: vehicle || { year: null, make: null, model: null, mileage: null, vin: null },
+        vehicle: vehicle ? { ...vehicle, mileage } : { year: null, make: null, model: null, mileage: null, vin: null },
       },
       { status: 200 }
     );
