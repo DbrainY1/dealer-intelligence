@@ -40,16 +40,16 @@ export default async function CompetitorsPage() {
     })
   );
 
-  // Weekly adds (kept for New Listings table)
-  const { data: weeklyAdds } = await supabase
+  // Weekly adds + removals (for New Listings + Estimated Sales tables)
+  const { data: weeklyEvents } = await supabase
     .from("inventory_events")
     .select("*")
     .in("dealer_id", dealerIds)
-    .eq("event_type", "added")
+    .in("event_type", ["added", "removed"])
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
     .order("event_date", { ascending: false });
 
-  const eventList: InventoryEvent[] = weeklyAdds ?? [];
+  const eventList: InventoryEvent[] = weeklyEvents ?? [];
 
   // MTD sold per dealer
   const { data: monthlySales } = await supabase
