@@ -45,7 +45,8 @@ export interface VinPresence {
 export interface InventoryEvent {
   id: number;
   vehicle_id: number;
-  dealer_id: number;
+  to_dealer_id: number | null;
+  dealer_id?: number; // Deprecated, use to_dealer_id
   dealer_group_id: number | null;
   event_type: "added" | "removed" | "price_changed";
   event_date: string;
