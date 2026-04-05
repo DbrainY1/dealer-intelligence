@@ -55,7 +55,7 @@ export default async function CompetitorsPage() {
   const vehicleIds = [...new Set(eventList.map(e => e.vehicle_id))];
   let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null; vin: string | null }>();
   if (vehicleIds.length > 0) {
-    // Batch fetch in chunks (Supabase has limits on IN clause)
+    // Batch fetch vehicles in chunks
     for (let i = 0; i < vehicleIds.length; i += 100) {
       const chunk = vehicleIds.slice(i, i + 100);
       const { data: vehicles } = await supabase
@@ -67,27 +67,28 @@ export default async function CompetitorsPage() {
           vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: null, vin: v.vin });
         });
       }
-      
-      // Fetch mileage from latest snapshots
+    }
+    
+    // Fetch mileage from snapshots in chunks
+    for (let i = 0; i < vehicleIds.length; i += 100) {
+      const chunk = vehicleIds.slice(i, i + 100);
       const { data: snapshots } = await supabase
         .from("inventory_snapshots")
         .select("vehicle_id, mileage")
         .in("vehicle_id", chunk)
-        .not("mileage", "is", null)
         .order("snapshot_date", { ascending: false });
       
-      if (snapshots) {
-        // Keep only the latest mileage per vehicle
+      if (snapshots && snapshots.length > 0) {
         const seen = new Set<number>();
-        snapshots.forEach((snap: any) => {
-          if (!seen.has(snap.vehicle_id)) {
+        for (const snap of snapshots) {
+          if (!seen.has(snap.vehicle_id) && snap.mileage) {
             const existing = vehicleMap.get(snap.vehicle_id);
             if (existing) {
               vehicleMap.set(snap.vehicle_id, { ...existing, mileage: snap.mileage });
+              seen.add(snap.vehicle_id);
             }
-            seen.add(snap.vehicle_id);
           }
-        });
+        }
       }
     }
   }
