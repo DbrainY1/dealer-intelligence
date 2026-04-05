@@ -51,7 +51,7 @@ export default async function CompetitorsPage() {
 
   const eventList: InventoryEvent[] = weeklyEvents ?? [];
 
-  // Fetch vehicle data for events (year, make, model, vin)
+  // Fetch vehicle data for events (year, make, model, vin, mileage)
   const vehicleIds = [...new Set(eventList.map(e => e.vehicle_id))];
   let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null; vin: string | null }>();
   if (vehicleIds.length > 0) {
@@ -65,6 +65,28 @@ export default async function CompetitorsPage() {
       if (vehicles) {
         vehicles.forEach((v: any) => {
           vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: null, vin: v.vin });
+        });
+      }
+      
+      // Fetch mileage from latest snapshots
+      const { data: snapshots } = await supabase
+        .from("inventory_snapshots")
+        .select("vehicle_id, mileage")
+        .in("vehicle_id", chunk)
+        .not("mileage", "is", null)
+        .order("snapshot_date", { ascending: false });
+      
+      if (snapshots) {
+        // Keep only the latest mileage per vehicle
+        const seen = new Set<number>();
+        snapshots.forEach((snap: any) => {
+          if (!seen.has(snap.vehicle_id)) {
+            const existing = vehicleMap.get(snap.vehicle_id);
+            if (existing) {
+              vehicleMap.set(snap.vehicle_id, { ...existing, mileage: snap.mileage });
+            }
+            seen.add(snap.vehicle_id);
+          }
         });
       }
     }

@@ -125,12 +125,9 @@ export default function CompetitorsPageClient({
                 .slice(0, 30)
                 .map((e) => {
                   const veh = vehicleMap[e.vehicle_id];
-                  const soldDate = new Date(e.event_date);
-                  const formattedDate = soldDate.toLocaleDateString("en-GB", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                  });
+                  // Parse and format date: YYYY-MM-DD → DD/MM/YYYY
+                  const [year, month, day] = e.event_date.split("-");
+                  const formattedDate = `${day}/${month}/${year}`;
                   return (
                     <tr
                       key={e.id}
