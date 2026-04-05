@@ -99,9 +99,10 @@ export default function CompetitorsPageClient({
             <thead className="text-xs text-gray-400 uppercase bg-gray-800 sticky top-0">
               <tr>
                 <th className="px-4 py-3">Dealer</th>
+                <th className="px-4 py-3">Year / Make / Model</th>
                 <th className="px-4 py-3">Vehicle ID</th>
                 <th className="px-4 py-3">List Price</th>
-                <th className="px-4 py-3">Sold Date</th>
+                <th className="px-4 py-3">Date Sold</th>
               </tr>
             </thead>
             <tbody>
@@ -111,24 +112,32 @@ export default function CompetitorsPageClient({
                 .slice(0, 30)
                 .map((e) => (
                   <tr key={e.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                    <td className="px-4 py-3 font-semibold text-red-400">
+                    <td className="px-4 py-3 font-semibold text-orange-500">
                       {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
                     </td>
+                    <td className="px-4 py-3 text-gray-300">
+                      <button
+                        onClick={() => setSelectedVehicleId(e.vehicle_id)}
+                        className="text-orange-400 hover:text-orange-300 hover:underline cursor-pointer"
+                      >
+                        View Details
+                      </button>
+                    </td>
                     <td
-                      className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
+                      className="px-4 py-3 font-mono text-orange-400 cursor-pointer hover:underline"
                       onClick={() => setSelectedVehicleId(e.vehicle_id)}
                     >
                       VID-{e.vehicle_id}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-amber-400">
+                    <td className="px-4 py-3 font-semibold text-orange-500">
                       {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{e.event_date.slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-orange-400">{e.event_date.slice(0, 10)}</td>
                   </tr>
                 ))}
               {filteredEvents.filter(e => e.event_type === "removed").length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                     No sales in selected dealers
                   </td>
                 </tr>

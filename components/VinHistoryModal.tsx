@@ -9,8 +9,21 @@ interface VinHistoryModalProps {
   onClose: () => void;
 }
 
+interface VehicleData {
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  mileage: number | null;
+}
+
 export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHistoryModalProps) {
   const [events, setEvents] = useState<InventoryEvent[]>([]);
+  const [vehicle, setVehicle] = useState<VehicleData>({
+    year: null,
+    make: null,
+    model: null,
+    mileage: null,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,6 +33,7 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
         if (!res.ok) throw new Error("Failed to fetch");
         const data = await res.json();
         setEvents(data.events || []);
+        setVehicle(data.vehicle || {});
       } catch (err) {
         console.error("VIN history error:", err);
       } finally {
@@ -41,37 +55,49 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
   const daysOnMarket = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg border border-gray-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-orange-950/30 border-2 border-orange-500 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="sticky top-0 bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between">
+        <div className="sticky top-0 bg-orange-950/40 border-b-2 border-orange-500 p-4 flex items-center justify-between">
           <div>
-            <h2 className="text-white font-bold text-lg">Vehicle History</h2>
-            <p className="text-gray-400 text-sm">VID-{vehicleId}</p>
+            <h2 className="text-orange-300 font-bold text-lg">Vehicle History</h2>
+            <p className="text-orange-200 text-sm">
+              {vehicle.year} {vehicle.make} {vehicle.model}
+            </p>
+            <p className="text-orange-100 text-xs mt-1">VID-{vehicleId}</p>
+            {vehicle.mileage && (
+              <p className="text-orange-200 text-xs">Mileage: {vehicle.mileage.toLocaleString()} mi</p>
+            )}
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl leading-none"
+            className="text-orange-300 hover:text-orange-100 text-2xl leading-none"
           >
             ×
           </button>
         </div>
 
         {/* Summary */}
-        <div className="p-4 bg-gray-800/50 border-b border-gray-800">
+        <div className="p-4 bg-orange-950/50 border-b-2 border-orange-500">
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
-              <p className="text-gray-500">Days on Market</p>
-              <p className="text-white font-bold text-lg">{daysOnMarket}d</p>
+              <p className="text-orange-200">Days on Market</p>
+              <p className="text-orange-400 font-bold text-lg">{daysOnMarket}d</p>
             </div>
             <div>
-              <p className="text-gray-500">Total Events</p>
-              <p className="text-white font-bold text-lg">{events.length}</p>
+              <p className="text-orange-200">Total Events</p>
+              <p className="text-orange-400 font-bold text-lg">{events.length}</p>
             </div>
             <div>
-              <p className="text-gray-500">Status</p>
+              <p className="text-orange-200">Status</p>
               <p className={`font-bold text-lg ${
-                events.some(e => e.event_type === "removed") ? "text-red-400" : "text-green-400"
+                events.some(e => e.event_type === "removed") ? "text-orange-600" : "text-orange-400"
               }`}>
                 {events.some(e => e.event_type === "removed") ? "Sold" : "Active"}
               </p>

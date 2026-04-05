@@ -14,18 +14,37 @@ export async function GET(
   const supabase = await createServerSupabase();
 
   try {
-    const { data, error } = await supabase
+    // Fetch events
+    const { data: events, error: eventsError } = await supabase
       .from("inventory_events")
       .select("*")
       .eq("vehicle_id", vehicleId)
       .order("event_date", { ascending: true });
 
-    if (error) {
-      console.error("Supabase error:", error);
-      return Response.json({ error: error.message }, { status: 500 });
+    if (eventsError) {
+      console.error("Supabase error:", eventsError);
+      return Response.json({ error: eventsError.message }, { status: 500 });
     }
 
-    return Response.json({ events: data || [] }, { status: 200 });
+    // Fetch vehicle details
+    const { data: vehicle, error: vehicleError } = await supabase
+      .from("vehicles")
+      .select("year, make, model, mileage")
+      .eq("id", vehicleId)
+      .limit(1)
+      .single();
+
+    if (vehicleError && vehicleError.code !== "PGRST116") {
+      console.error("Vehicle lookup error:", vehicleError);
+    }
+
+    return Response.json(
+      {
+        events: events || [],
+        vehicle: vehicle || { year: null, make: null, model: null, mileage: null },
+      },
+      { status: 200 }
+    );
   } catch (err) {
     console.error("Vehicle history error:", err);
     return Response.json({ error: "Internal error" }, { status: 500 });
