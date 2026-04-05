@@ -33,6 +33,8 @@ export default function CompetitorsPageClient({
     new Set(scorecards.map((s) => s.id))
   );
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Filter dealers and snapshots based on selection
   const selectedDealers = dealers.filter((d) => selectedIds.has(d.id));
@@ -108,20 +110,104 @@ export default function CompetitorsPageClient({
           <table className="w-full text-sm text-left text-gray-300">
             <thead className="text-xs text-gray-400 uppercase bg-gray-800 sticky top-0">
               <tr>
-                <th className="px-4 py-3">Dealer</th>
-                <th className="px-4 py-3">Year</th>
-                <th className="px-4 py-3">Make</th>
-                <th className="px-4 py-3">Model</th>
-                <th className="px-4 py-3">Mileage</th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "dealer") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("dealer"); setSortDirection("asc"); }
+                }}>
+                  Dealer {sortColumn === "dealer" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "year") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("year"); setSortDirection("asc"); }
+                }}>
+                  Year {sortColumn === "year" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "make") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("make"); setSortDirection("asc"); }
+                }}>
+                  Make {sortColumn === "make" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "model") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("model"); setSortDirection("asc"); }
+                }}>
+                  Model {sortColumn === "model" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "mileage") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("mileage"); setSortDirection("asc"); }
+                }}>
+                  Mileage {sortColumn === "mileage" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
                 <th className="px-4 py-3">VIN#</th>
-                <th className="px-4 py-3">List Price</th>
-                <th className="px-4 py-3">Date Sold</th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "price") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("price"); setSortDirection("asc"); }
+                }}>
+                  List Price {sortColumn === "price" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3 cursor-pointer hover:text-orange-400" onClick={() => {
+                  if (sortColumn === "date") setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+                  else { setSortColumn("date"); setSortDirection("asc"); }
+                }}>
+                  Date Sold {sortColumn === "date" && (sortDirection === "asc" ? "↑" : "↓")}
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredEvents
                 .filter(e => e.event_type === "removed")
-                .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
+                .sort((a, b) => {
+                  // Apply custom sort if a column is selected
+                  if (sortColumn) {
+                    let aVal: any, bVal: any;
+                    const vehA = vehicleMap[a.vehicle_id];
+                    const vehB = vehicleMap[b.vehicle_id];
+                    
+                    switch (sortColumn) {
+                      case "dealer":
+                        aVal = dealers.find(d => d.id === a.to_dealer_id)?.name || "";
+                        bVal = dealers.find(d => d.id === b.to_dealer_id)?.name || "";
+                        break;
+                      case "year":
+                        aVal = vehA?.year || 0;
+                        bVal = vehB?.year || 0;
+                        break;
+                      case "make":
+                        aVal = vehA?.make || "";
+                        bVal = vehB?.make || "";
+                        break;
+                      case "model":
+                        aVal = vehA?.model || "";
+                        bVal = vehB?.model || "";
+                        break;
+                      case "mileage":
+                        aVal = vehA?.mileage || 0;
+                        bVal = vehB?.mileage || 0;
+                        break;
+                      case "price":
+                        aVal = a.price_at_listing || a.last_seen_price || 0;
+                        bVal = b.price_at_listing || b.last_seen_price || 0;
+                        break;
+                      case "date":
+                        aVal = new Date(a.event_date).getTime();
+                        bVal = new Date(b.event_date).getTime();
+                        break;
+                      default:
+                        return 0;
+                    }
+                    
+                    if (typeof aVal === "string") {
+                      return sortDirection === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                    } else {
+                      return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+                    }
+                  }
+                  
+                  // Default sort by date descending
+                  return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
+                })
                 .slice(0, 30)
                 .map((e) => {
                   const veh = vehicleMap[e.vehicle_id];
