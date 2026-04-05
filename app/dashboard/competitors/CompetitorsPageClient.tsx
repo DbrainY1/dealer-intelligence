@@ -6,11 +6,19 @@ import CompetitorCharts from "./CompetitorCharts";
 import VinHistoryModal from "@/components/VinHistoryModal";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
+interface VehicleInfo {
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  mileage: number | null;
+}
+
 interface Props {
   scorecards: ScorecardRow[];
   dealers: Dealer[];
   snapshots: InventorySnapshot[];
   eventList: InventoryEvent[];
+  vehicleMap?: Record<number, VehicleInfo>;
 }
 
 export default function CompetitorsPageClient({
@@ -18,6 +26,7 @@ export default function CompetitorsPageClient({
   dealers,
   snapshots,
   eventList,
+  vehicleMap = {},
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(scorecards.map((s) => s.id))
@@ -99,8 +108,11 @@ export default function CompetitorsPageClient({
             <thead className="text-xs text-gray-400 uppercase bg-gray-800 sticky top-0">
               <tr>
                 <th className="px-4 py-3">Dealer</th>
-                <th className="px-4 py-3">Year / Make / Model</th>
-                <th className="px-4 py-3">Vehicle ID</th>
+                <th className="px-4 py-3">Year</th>
+                <th className="px-4 py-3">Make</th>
+                <th className="px-4 py-3">Model</th>
+                <th className="px-4 py-3">Mileage</th>
+                <th className="px-4 py-3">VIN#</th>
                 <th className="px-4 py-3">List Price</th>
                 <th className="px-4 py-3">Date Sold</th>
               </tr>
@@ -110,34 +122,40 @@ export default function CompetitorsPageClient({
                 .filter(e => e.event_type === "removed")
                 .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
                 .slice(0, 30)
-                .map((e) => (
-                  <tr key={e.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                    <td className="px-4 py-3 font-semibold text-orange-500">
-                      {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
-                    </td>
-                    <td className="px-4 py-3 text-gray-300">
-                      <button
-                        onClick={() => setSelectedVehicleId(e.vehicle_id)}
-                        className="text-orange-400 hover:text-orange-300 hover:underline cursor-pointer"
-                      >
-                        View Details
-                      </button>
-                    </td>
-                    <td
-                      className="px-4 py-3 font-mono text-orange-400 cursor-pointer hover:underline"
+                .map((e) => {
+                  const veh = vehicleMap[e.vehicle_id];
+                  const soldDate = new Date(e.event_date);
+                  const formattedDate = soldDate.toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  });
+                  return (
+                    <tr
+                      key={e.id}
+                      className="border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer"
                       onClick={() => setSelectedVehicleId(e.vehicle_id)}
                     >
-                      VID-{e.vehicle_id}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-orange-500">
-                      {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-orange-400">{e.event_date.slice(0, 10)}</td>
-                  </tr>
-                ))}
+                      <td className="px-4 py-3 font-semibold text-orange-500">
+                        {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
+                      </td>
+                      <td className="px-4 py-3 text-orange-400">{veh?.year || "—"}</td>
+                      <td className="px-4 py-3 text-orange-400">{veh?.make || "—"}</td>
+                      <td className="px-4 py-3 text-orange-400">{veh?.model || "—"}</td>
+                      <td className="px-4 py-3 text-orange-400">
+                        {veh?.mileage ? veh.mileage.toLocaleString() : "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-orange-400">VID-{e.vehicle_id}</td>
+                      <td className="px-4 py-3 font-semibold text-orange-500">
+                        {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-orange-400">{formattedDate}</td>
+                    </tr>
+                  );
+                })}
               {filteredEvents.filter(e => e.event_type === "removed").length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                     No sales in selected dealers
                   </td>
                 </tr>

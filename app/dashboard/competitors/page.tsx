@@ -51,6 +51,21 @@ export default async function CompetitorsPage() {
 
   const eventList: InventoryEvent[] = weeklyEvents ?? [];
 
+  // Fetch vehicle data for events (year, make, model, mileage)
+  const vehicleIds = [...new Set(eventList.map(e => e.vehicle_id))];
+  let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null }>();
+  if (vehicleIds.length > 0) {
+    const { data: vehicles } = await supabase
+      .from("vehicles")
+      .select("id, year, make, model, mileage")
+      .in("id", vehicleIds);
+    if (vehicles) {
+      vehicles.forEach((v: any) => {
+        vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: v.mileage });
+      });
+    }
+  }
+
   // MTD sold per dealer
   const { data: monthlySales } = await supabase
     .from("monthly_sales")
@@ -142,6 +157,7 @@ export default async function CompetitorsPage() {
       dealers={dealers}
       snapshots={allSnapshots}
       eventList={eventList}
+      vehicleMap={Object.fromEntries(vehicleMap)}
     />
   );
 }
