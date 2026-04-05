@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import MarketPulseCards, { ScorecardRow } from "./MarketPulseCards";
 import CompetitorCharts from "./CompetitorCharts";
+import VinHistoryModal from "@/components/VinHistoryModal";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
 interface Props {
@@ -21,6 +22,7 @@ export default function CompetitorsPageClient({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(scorecards.map((s) => s.id))
   );
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
 
   // Filter dealers and snapshots based on selection
   const selectedDealers = dealers.filter((d) => selectedIds.has(d.id));
@@ -63,7 +65,12 @@ export default function CompetitorsPageClient({
                     <td className="px-4 py-3 font-semibold text-blue-300">
                       {dealers.find((d) => d.id === e.dealer_id)?.name ?? `Dealer ${e.dealer_id}`}
                     </td>
-                    <td className="px-4 py-3 font-mono text-amber-400">VID-{e.vehicle_id}</td>
+                    <td
+                      className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
+                      onClick={() => setSelectedVehicleId(e.vehicle_id)}
+                    >
+                      VID-{e.vehicle_id}
+                    </td>
                     <td className="px-4 py-3 font-semibold text-green-400">
                       {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
                     </td>
@@ -107,7 +114,12 @@ export default function CompetitorsPageClient({
                     <td className="px-4 py-3 font-semibold text-red-400">
                       {dealers.find((d) => d.id === e.dealer_id)?.name ?? `Dealer ${e.dealer_id}`}
                     </td>
-                    <td className="px-4 py-3 font-mono text-amber-400">VID-{e.vehicle_id}</td>
+                    <td
+                      className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
+                      onClick={() => setSelectedVehicleId(e.vehicle_id)}
+                    >
+                      VID-{e.vehicle_id}
+                    </td>
                     <td className="px-4 py-3 font-semibold text-amber-400">
                       {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
                     </td>
@@ -125,6 +137,15 @@ export default function CompetitorsPageClient({
           </table>
         </div>
       </div>
+
+      {/* VIN History Modal */}
+      {selectedVehicleId && (
+        <VinHistoryModal
+          vehicleId={selectedVehicleId}
+          dealers={dealers}
+          onClose={() => setSelectedVehicleId(null)}
+        />
+      )}
     </div>
   );
 }
