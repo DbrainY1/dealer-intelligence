@@ -44,7 +44,7 @@ export default async function CompetitorsPage() {
   const { data: weeklyEvents } = await supabase
     .from("inventory_events")
     .select("*")
-    .in("dealer_id", dealerIds)
+    .in("to_dealer_id", dealerIds)
     .in("event_type", ["added", "removed"])
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
     .order("event_date", { ascending: false });

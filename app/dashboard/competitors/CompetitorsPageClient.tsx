@@ -27,7 +27,7 @@ export default function CompetitorsPageClient({
   // Filter dealers and snapshots based on selection
   const selectedDealers = dealers.filter((d) => selectedIds.has(d.id));
   const filteredSnapshots = snapshots.filter((s) => selectedIds.has(s.dealer_id));
-  const filteredEvents = eventList.filter((e) => selectedIds.has(e.dealer_id));
+  const filteredEvents = eventList.filter((e) => selectedIds.has(e.to_dealer_id || 0));
 
 
 
@@ -63,7 +63,7 @@ export default function CompetitorsPageClient({
                 .map((e) => (
                   <tr key={e.id} className="border-b border-gray-800 hover:bg-gray-800/50">
                     <td className="px-4 py-3 font-semibold text-blue-300">
-                      {dealers.find((d) => d.id === e.dealer_id)?.name ?? `Dealer ${e.dealer_id}`}
+                      {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
                     </td>
                     <td
                       className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
@@ -112,7 +112,7 @@ export default function CompetitorsPageClient({
                 .map((e) => (
                   <tr key={e.id} className="border-b border-gray-800 hover:bg-gray-800/50">
                     <td className="px-4 py-3 font-semibold text-red-400">
-                      {dealers.find((d) => d.id === e.dealer_id)?.name ?? `Dealer ${e.dealer_id}`}
+                      {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
                     </td>
                     <td
                       className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
