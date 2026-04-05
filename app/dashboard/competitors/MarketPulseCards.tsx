@@ -89,9 +89,8 @@ function SortableCard({
           </div>
         </div>
 
-        {/* Price Sparkline — 7-day trend */}
-        <div className="my-2" onClick={(e) => e.stopPropagation()}>
-          <p className="text-xs text-gray-500 mb-1">7-day avg price</p>
+        {/* Avg price stats */}
+        <div className="my-1" onClick={(e) => e.stopPropagation()}>
           <PriceSparkline dealerId={row.id} />
         </div>
 
