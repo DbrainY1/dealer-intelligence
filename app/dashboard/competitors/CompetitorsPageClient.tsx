@@ -145,7 +145,7 @@ export default function CompetitorsPageClient({
                       </td>
                       <td className="px-4 py-3 font-mono text-orange-400 text-xs">{veh?.vin || "—"}</td>
                       <td className="px-4 py-3 font-semibold text-orange-500">
-                        {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
+                        {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : e.last_seen_price != null ? "$" + e.last_seen_price.toLocaleString() : "—"}
                       </td>
                       <td className="px-4 py-3 text-orange-400">{formattedDate}</td>
                     </tr>
