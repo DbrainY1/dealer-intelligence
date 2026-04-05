@@ -55,14 +55,18 @@ export default async function CompetitorsPage() {
   const vehicleIds = [...new Set(eventList.map(e => e.vehicle_id))];
   let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null; vin: string | null }>();
   if (vehicleIds.length > 0) {
-    const { data: vehicles } = await supabase
-      .from("vehicles")
-      .select("id, year, make, model, mileage, vin")
-      .in("id", vehicleIds);
-    if (vehicles) {
-      vehicles.forEach((v: any) => {
-        vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: v.mileage, vin: v.vin });
-      });
+    // Batch fetch in chunks (Supabase has limits on IN clause)
+    for (let i = 0; i < vehicleIds.length; i += 100) {
+      const chunk = vehicleIds.slice(i, i + 100);
+      const { data: vehicles } = await supabase
+        .from("vehicles")
+        .select("id, year, make, model, mileage, vin")
+        .in("id", chunk);
+      if (vehicles) {
+        vehicles.forEach((v: any) => {
+          vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: v.mileage, vin: v.vin });
+        });
+      }
     }
   }
 
