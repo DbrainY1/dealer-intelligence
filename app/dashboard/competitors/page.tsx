@@ -69,22 +69,25 @@ export default async function CompetitorsPage() {
       }
     }
     
-    // Fetch mileage from snapshots in chunks
+    // Fetch mileage + price from snapshots in chunks
     for (let i = 0; i < vehicleIds.length; i += 100) {
       const chunk = vehicleIds.slice(i, i + 100);
       const { data: snapshots } = await supabase
         .from("inventory_snapshots")
-        .select("vehicle_id, mileage")
+        .select("vehicle_id, mileage, list_price")
         .in("vehicle_id", chunk)
         .order("snapshot_date", { ascending: false });
       
       if (snapshots && snapshots.length > 0) {
         const seen = new Set<number>();
         for (const snap of snapshots) {
-          if (!seen.has(snap.vehicle_id) && snap.mileage) {
+          if (!seen.has(snap.vehicle_id)) {
             const existing = vehicleMap.get(snap.vehicle_id);
             if (existing) {
-              vehicleMap.set(snap.vehicle_id, { ...existing, mileage: snap.mileage });
+              vehicleMap.set(snap.vehicle_id, {
+                ...existing,
+                mileage: snap.mileage || null,
+              });
               seen.add(snap.vehicle_id);
             }
           }
