@@ -11,6 +11,7 @@ interface VehicleInfo {
   make: string | null;
   model: string | null;
   mileage: number | null;
+  vin: string | null;
 }
 
 interface Props {
@@ -145,7 +146,7 @@ export default function CompetitorsPageClient({
                       <td className="px-4 py-3 text-orange-400">
                         {veh?.mileage ? veh.mileage.toLocaleString() : "—"}
                       </td>
-                      <td className="px-4 py-3 font-mono text-orange-400">VID-{e.vehicle_id}</td>
+                      <td className="px-4 py-3 font-mono text-orange-400 text-xs">{veh?.vin || "—"}</td>
                       <td className="px-4 py-3 font-semibold text-orange-500">
                         {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
                       </td>

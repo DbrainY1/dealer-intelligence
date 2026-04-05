@@ -14,6 +14,7 @@ interface VehicleData {
   make: string | null;
   model: string | null;
   mileage: number | null;
+  vin: string | null;
 }
 
 export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHistoryModalProps) {
@@ -23,6 +24,7 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
     make: null,
     model: null,
     mileage: null,
+    vin: null,
   });
   const [loading, setLoading] = useState(true);
 
@@ -76,7 +78,7 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
                 </span>
               )}
             </div>
-            <p className="text-orange-100 text-sm">VID-{vehicleId}</p>
+            <p className="text-orange-100 text-xs font-mono">{vehicle.vin || `VID-${vehicleId}`}</p>
           </div>
           <button
             onClick={onClose}

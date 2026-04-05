@@ -29,7 +29,7 @@ export async function GET(
     // Fetch vehicle details
     const { data: vehicle, error: vehicleError } = await supabase
       .from("vehicles")
-      .select("year, make, model, mileage")
+      .select("year, make, model, mileage, vin")
       .eq("id", vehicleId)
       .limit(1)
       .single();
@@ -41,7 +41,7 @@ export async function GET(
     return Response.json(
       {
         events: events || [],
-        vehicle: vehicle || { year: null, make: null, model: null, mileage: null },
+        vehicle: vehicle || { year: null, make: null, model: null, mileage: null, vin: null },
       },
       { status: 200 }
     );

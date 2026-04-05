@@ -51,17 +51,17 @@ export default async function CompetitorsPage() {
 
   const eventList: InventoryEvent[] = weeklyEvents ?? [];
 
-  // Fetch vehicle data for events (year, make, model, mileage)
+  // Fetch vehicle data for events (year, make, model, mileage, vin)
   const vehicleIds = [...new Set(eventList.map(e => e.vehicle_id))];
-  let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null }>();
+  let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null; vin: string | null }>();
   if (vehicleIds.length > 0) {
     const { data: vehicles } = await supabase
       .from("vehicles")
-      .select("id, year, make, model, mileage")
+      .select("id, year, make, model, mileage, vin")
       .in("id", vehicleIds);
     if (vehicles) {
       vehicles.forEach((v: any) => {
-        vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: v.mileage });
+        vehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, mileage: v.mileage, vin: v.vin });
       });
     }
   }
