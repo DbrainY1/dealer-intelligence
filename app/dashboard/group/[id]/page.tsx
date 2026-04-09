@@ -70,7 +70,7 @@ export default async function GroupPage({ params }: PageProps) {
           const avgPrice = dealerSnaps.length
             ? Math.round(dealerSnaps.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / dealerSnaps.length)
             : 0;
-          const soldCount = eventList.filter((e) => e.dealer_id === d.id && e.event_type === "removed").length;
+          const soldCount = eventList.filter((e) => e.dealer_id === d.id && e.event_type === "sold").length;
           return (
             <Link key={d.id} href={`/dashboard/dealer/${d.id}`} className="block">
               <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-blue-600 transition-colors">

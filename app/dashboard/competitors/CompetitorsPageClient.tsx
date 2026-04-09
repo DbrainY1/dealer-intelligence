@@ -104,7 +104,7 @@ export default function CompetitorsPageClient({
       {/* Estimated Sales */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-white font-semibold mb-4">
-          Estimated Sales (Last 7 Days) — {filteredEvents.filter(e => e.event_type === "removed").length} sold
+          Estimated Sales (Last 7 Days) — {filteredEvents.filter(e => e.event_type === "sold").length} sold
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left text-gray-300">
@@ -157,7 +157,7 @@ export default function CompetitorsPageClient({
             </thead>
             <tbody>
               {filteredEvents
-                .filter(e => e.event_type === "removed")
+                .filter(e => e.event_type === "sold")
                 .sort((a, b) => {
                   // Apply custom sort if a column is selected
                   if (sortColumn) {
@@ -237,7 +237,7 @@ export default function CompetitorsPageClient({
                     </tr>
                   );
                 })}
-              {filteredEvents.filter(e => e.event_type === "removed").length === 0 && (
+              {filteredEvents.filter(e => e.event_type === "sold").length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                     No sales in selected dealers
