@@ -70,7 +70,7 @@ export default async function DealerPage({ params }: PageProps) {
     .from("inventory_events")
     .select("vehicle_id, event_date, last_seen_price")
     .eq("from_dealer_id", dealerId)
-    .eq("event_type", "removed")
+    .eq("event_type", "SOLD")
     .gte("event_date", monthStart)
     .order("event_date", { ascending: false });
 
@@ -78,7 +78,7 @@ export default async function DealerPage({ params }: PageProps) {
     .from("inventory_events")
     .select("vehicle_id, event_date, last_seen_price")
     .eq("from_dealer_id", dealerId)
-    .eq("event_type", "removed")
+    .eq("event_type", "SOLD")
     .gte("event_date", yearStart)
     .order("event_date", { ascending: false });
 
