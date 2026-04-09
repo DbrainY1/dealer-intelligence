@@ -16,6 +16,8 @@ interface DealerRow {
   name: string;
   count: number;
   sold: number;
+  added: number;
+  transferred: number;
 }
 
 interface Props {
@@ -59,6 +61,8 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
               <th className="px-4 py-3">Dealer</th>
               <th className="px-4 py-3">In Stock</th>
               <th className="px-4 py-3">MTD Sold</th>
+              <th className="px-4 py-3">MTD Added</th>
+              <th className="px-4 py-3">MTD Transferred</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -74,6 +78,8 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
                   <td className="px-4 py-3 text-white font-medium">{d.name}</td>
                   <td className="px-4 py-3">{d.count}</td>
                   <td className="px-4 py-3">{d.sold}</td>
+                  <td className="px-4 py-3 text-green-400">{d.added}</td>
+                  <td className="px-4 py-3 text-yellow-400">{d.transferred}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">→</td>
                 </tr>
               );

@@ -163,7 +163,7 @@ export default async function DashboardPage() {
   const soldLastMo = sumSoldForMonth(lastMoMonthStartStr);
   const soldLastYr = sumSoldForMonth(lastYrMonthStartStr);
 
-  // Per-dealer today: latest snapshot count + avg price
+  // Per-dealer today: latest snapshot count + sales + added + transferred (MTD)
   const byDealer = await Promise.all(
     dealerList.map(async (d) => {
       const { data: latestDate } = await supabase
@@ -174,7 +174,7 @@ export default async function DashboardPage() {
         .limit(1)
         .single();
 
-      if (!latestDate) return { name: d.name, count: 0, sold: 0 };
+      if (!latestDate) return { name: d.name, count: 0, sold: 0, added: 0, transferred: 0 };
 
       const { count } = await supabase
         .from("inventory_snapshots")
@@ -187,10 +187,27 @@ export default async function DashboardPage() {
           r.dealer_id === d.id && r.month_start === monthStartStr
       );
 
+      // Count MTD added and transferred (arriving at this dealer)
+      const { data: addedEvents } = await supabase
+        .from("inventory_events")
+        .select("id", { count: "exact" })
+        .eq("to_dealer_id", d.id)
+        .eq("event_type", "added")
+        .gte("event_date", monthStartStr);
+
+      const { data: transferredEvents } = await supabase
+        .from("inventory_events")
+        .select("id", { count: "exact" })
+        .eq("to_dealer_id", d.id)
+        .eq("event_type", "transferred")
+        .gte("event_date", monthStartStr);
+
       return {
         name: d.name,
         count: count ?? 0,
         sold: soldByDealer?.units_sold ?? 0,
+        added: addedEvents?.length ?? 0,
+        transferred: transferredEvents?.length ?? 0,
       };
     })
   );
