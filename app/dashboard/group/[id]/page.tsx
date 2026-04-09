@@ -70,7 +70,12 @@ export default async function GroupPage({ params }: PageProps) {
           const avgPrice = dealerSnaps.length
             ? Math.round(dealerSnaps.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / dealerSnaps.length)
             : 0;
-          const soldCount = eventList.filter((e) => e.dealer_id === d.id && e.event_type === "sold").length;
+          // MTD Sold = vehicles leaving this dealer (from_dealer_id)
+          const soldCount = eventList.filter((e) => e.from_dealer_id === d.id && e.event_type === "sold").length;
+          // MTD Added = vehicles arriving at this dealer (to_dealer_id)
+          const addedCount = eventList.filter((e) => e.to_dealer_id === d.id && e.event_type === "added").length;
+          // MTD Transferred = vehicles moving within same group (to_dealer_id)
+          const transferredCount = eventList.filter((e) => e.to_dealer_id === d.id && e.event_type === "transferred").length;
           return (
             <Link key={d.id} href={`/dashboard/dealer/${d.id}`} className="block">
               <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-blue-600 transition-colors">
@@ -85,8 +90,16 @@ export default async function GroupPage({ params }: PageProps) {
                     <p className="text-white font-bold">${avgPrice.toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">Sold (30d)</p>
+                    <p className="text-gray-400">MTD Sold</p>
                     <p className="text-white font-bold">{soldCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">MTD Added</p>
+                    <p className="text-white font-bold text-green-400">{addedCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">MTD Transferred</p>
+                    <p className="text-white font-bold text-yellow-400">{transferredCount}</p>
                   </div>
                 </div>
               </div>
