@@ -33,6 +33,8 @@ const DEALERS: Dealer[] = [
   { name: "Hot Deals Auto",      lat: 36.12800,  lng: -115.20850, tracked: true, address: "3401 S Decatur Blvd, Las Vegas, NV 89102",          website: "https://www.hotdealsauto.com" },
   { name: "RevEuro",             lat: 36.05766,  lng: -115.17624, tracked: true, address: "2540 W Warm Springs Rd, Las Vegas, NV 89119",        website: "https://www.reveuro.com" },
   { name: "Emporio Auto Sales",  lat: 36.151542393765446, lng: -115.10880152883577, tracked: true, address: "3024 E Fremont St, Las Vegas, NV 89104",               website: "https://www.emporioautosales.com" },
+  { name: "Las Vegas Mitsubishi", lat: 36.07792075319564, lng: -115.20852095134063, tracked: true, address: "6165 S Decatur Blvd, Las Vegas, NV 89118", website: "https://www.lasvegasmitsubishi.com" },
+  { name: "Las Vegas Auto Sports", lat: 36.11099245928179, lng: -115.20436733024083, tracked: true, address: "4365 S Cameron St, Las Vegas, NV 89103", website: "https://www.lasvegasautosports.com" },
 ];
 
 export default function LocationsMap() {
