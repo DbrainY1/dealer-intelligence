@@ -1,5 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
+import MapConfigPanel from "@/components/MapConfigPanel";
 import type { ScrapeLog } from "@/types";
 
 const ROLES = [
@@ -24,6 +25,12 @@ function getStatusBadge(runAt: string, status: string) {
 export default async function SettingsPage({ searchParams }: { searchParams: { invited?: string } }) {
   const supabase = await createServerSupabase();
   const invited = searchParams?.invited === "true";
+
+  const { data: mapConfigData } = await supabase
+    .from("map_config")
+    .select("*")
+    .order("layer", { ascending: true });
+  const mapConfig = mapConfigData ?? [];
 
   const { data: scrapeLogs } = await supabase.from("scrape_log").select("*").order("run_at", { ascending: false }).limit(50);
   const logList: ScrapeLog[] = scrapeLogs ?? [];
@@ -160,6 +167,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: { i
 
               </form>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-800">
+            <h2 className="text-white font-semibold text-base">Map Intelligence Configuration</h2>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Tune map layer parameters in real time. Changes apply on next map load without code deployment.
+            </p>
+          </div>
+          <div className="p-6">
+            <MapConfigPanel config={mapConfig} />
           </div>
         </div>
 
