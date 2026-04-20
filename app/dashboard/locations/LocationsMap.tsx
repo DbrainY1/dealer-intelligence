@@ -183,7 +183,7 @@ export default function LocationsMap({ dealerData }: Props) {
       const map = L.map(mapRef.current, { center: [36.13, -115.13], zoom: 12.5, zoomControl: true });
       mapInstance.current = map;
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
         maxZoom: 19,
       }).addTo(map);
