@@ -8,8 +8,8 @@ interface MapConfigRow {
   label: string;
   description: string;
   value: number;
-  min: number;
-  max: number;
+  min_value: number | null;
+  max_value: number | null;
   updated_at: string;
 }
 
@@ -31,7 +31,7 @@ function formatLayerName(layer: string): string {
 }
 
 function isOpacityParam(row: MapConfigRow): boolean {
-  return row.label.toLowerCase().includes("opacity") || (row.max <= 1 && row.min >= 0);
+  return row.label.toLowerCase().includes("opacity") || (row.max_value != null && row.max_value <= 1 && (row.min_value ?? 0) >= 0);
 }
 
 function LayerCard({ layer, rows }: { layer: string; rows: MapConfigRow[] }) {
@@ -102,13 +102,13 @@ function LayerCard({ layer, rows }: { layer: string; rows: MapConfigRow[] }) {
                       type="number"
                       value={values[row.id] ?? row.value}
                       step={step}
-                      min={row.min}
-                      max={row.max}
+                      min={row.min_value ?? undefined}
+                      max={row.max_value ?? undefined}
                       onChange={(e) => handleChange(row.id, e.target.value)}
                       className="w-28 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm text-right font-mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                     />
                     <p className="text-gray-600 text-xs font-mono">
-                      Range: {row.min} — {row.max}
+                      Range: {row.min_value ?? "—"} — {row.max_value ?? "—"}
                     </p>
                   </div>
                 </div>
