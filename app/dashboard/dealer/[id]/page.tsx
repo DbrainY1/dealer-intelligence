@@ -71,6 +71,7 @@ export default async function DealerPage({ params }: PageProps) {
     .select("vehicle_id, event_date, last_seen_price")
     .eq("from_dealer_id", dealerId)
     .eq("event_type", "sold")
+    .eq("excluded_from_metrics", false)
     .gte("event_date", monthStart)
     .order("event_date", { ascending: false });
 
@@ -79,6 +80,7 @@ export default async function DealerPage({ params }: PageProps) {
     .select("vehicle_id, event_date, last_seen_price")
     .eq("from_dealer_id", dealerId)
     .eq("event_type", "sold")
+    .eq("excluded_from_metrics", false)
     .gte("event_date", yearStart)
     .order("event_date", { ascending: false });
 
@@ -102,6 +104,7 @@ export default async function DealerPage({ params }: PageProps) {
     .select("vehicle_id, event_date, price_at_listing")
     .eq("from_dealer_id", dealerId)
     .eq("event_type", "added")
+    .eq("excluded_from_metrics", false)
     .gte("event_date", monthStart)
     .order("event_date", { ascending: false });
 

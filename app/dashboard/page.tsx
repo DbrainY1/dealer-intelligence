@@ -193,6 +193,7 @@ export default async function DashboardPage() {
         .select("id", { count: "exact" })
         .eq("to_dealer_id", d.id)
         .eq("event_type", "added")
+        .eq("excluded_from_metrics", false)
         .gte("event_date", monthStartStr);
 
       const { data: transferredEvents } = await supabase
@@ -200,6 +201,7 @@ export default async function DashboardPage() {
         .select("id", { count: "exact" })
         .eq("to_dealer_id", d.id)
         .eq("event_type", "transferred")
+        .eq("excluded_from_metrics", false)
         .gte("event_date", monthStartStr);
 
       return {

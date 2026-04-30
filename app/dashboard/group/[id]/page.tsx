@@ -46,6 +46,7 @@ export default async function GroupPage({ params }: PageProps) {
     .from("inventory_events")
     .select("*")
     .in("dealer_id", dealerIds)
+    .eq("excluded_from_metrics", false)
     .gte("event_date", thirtyDaysAgo.toISOString());
 
   const eventList: InventoryEvent[] = events ?? [];

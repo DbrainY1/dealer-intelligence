@@ -54,6 +54,7 @@ export default async function LocationsPage() {
     .from("inventory_events")
     .select("to_dealer_id")
     .eq("event_type", "added")
+    .eq("excluded_from_metrics", false)
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
     .in("to_dealer_id", dealerIds);
   const newListingsByDealer = new Map<number, number>();

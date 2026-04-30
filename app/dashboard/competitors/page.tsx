@@ -46,6 +46,7 @@ export default async function CompetitorsPage() {
     .select("*")
     .in("to_dealer_id", dealerIds)
     .in("event_type", ["added", "removed"])
+    .eq("excluded_from_metrics", false)
     .gte("event_date", sevenDaysAgo.toISOString().split("T")[0])
     .order("event_date", { ascending: false });
 
