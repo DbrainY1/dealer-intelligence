@@ -42,6 +42,11 @@ export default async function TheMarketPage() {
     .in("severity", ["Alert", "Critical"])
     .eq("is_active", true);
 
+  const { data: trackedDealers = [] } = await supabase
+    .from("dealers")
+    .select("id, name")
+    .order("name");
+
   const signalPills =
     sortedSignals.length > 0
       ? sortedSignals.slice(0, 6).map((signal) => ({
@@ -427,6 +432,35 @@ export default async function TheMarketPage() {
           </table>
         </div>
       </section>
+      <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 mt-6">
+        <div className="flex items-end justify-between mb-5">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">
+              Dealer Directory
+            </p>
+            <h2 className="text-xl font-bold mt-2">All Tracked Dealers</h2>
+          </div>
+          <p className="text-sm text-gray-500">
+            Full operator universe • click into dealer profiles
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {(trackedDealers ?? []).map((dealer) => (
+            <a
+              key={dealer.id}
+              href={`/dashboard/dealer/${dealer.id}`}
+              className="rounded-lg border border-gray-800 bg-gray-950 px-4 py-3 hover:border-blue-500/40 transition-colors"
+            >
+              <div className="text-white font-medium">{dealer.name}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                Dealer Intelligence Profile
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+
     </div>
   );
 }
