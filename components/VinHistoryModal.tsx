@@ -113,10 +113,25 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
         {/* Timeline */}
         <div className="p-4 space-y-3">
           {sorted.map((event, idx) => {
-            const dealer = dealers.find(d => d.id === event.dealer_id);
-            const isRemoved = event.event_type === "removed";
+            const fromDealer = dealers.find(d => d.id === event.from_dealer_id);
+            const toDealer = dealers.find(d => d.id === event.to_dealer_id);
+
+            const isRemoved = event.event_type === "removed" || event.event_type === "sold";
             const isAdded = event.event_type === "added";
-            const isTransfer = event.from_dealer_id && event.from_dealer_id !== event.dealer_id;
+            const isTransfer = event.event_type === "transferred";
+
+            let dealerLabel = "Dealer unknown";
+            if (isTransfer && fromDealer && toDealer) {
+              dealerLabel = `${fromDealer.name} → ${toDealer.name}`;
+            } else if (isAdded && toDealer) {
+              dealerLabel = toDealer.name;
+            } else if (isRemoved && fromDealer) {
+              dealerLabel = fromDealer.name;
+            } else if (toDealer) {
+              dealerLabel = toDealer.name;
+            } else if (fromDealer) {
+              dealerLabel = fromDealer.name;
+            }
 
             let icon = "📍";
             let color = "text-blue-400";
@@ -156,7 +171,7 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
                         {isTransfer && ` (Transferred)`}
                       </p>
                       <p className="text-gray-400 text-sm">
-                        {dealer ? dealer.name : `Dealer ${event.dealer_id}`}
+                        {dealerLabel}
                       </p>
                     </div>
                     <p className="text-gray-500 text-sm">{event.event_date.slice(0, 10)}</p>
