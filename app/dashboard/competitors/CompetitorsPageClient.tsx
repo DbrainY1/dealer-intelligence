@@ -81,7 +81,7 @@ export default function CompetitorsPageClient({
                       className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
                       onClick={() => setSelectedVehicleId(e.vehicle_id)}
                     >
-                      VID-{e.vehicle_id}
+                      {vehicleMap[e.vehicle_id]?.vin || "—"}
                     </td>
                     <td className="px-4 py-3 font-semibold text-green-400">
                       {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : "—"}
