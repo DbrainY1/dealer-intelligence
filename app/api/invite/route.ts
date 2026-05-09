@@ -1,4 +1,4 @@
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createAdminSupabase } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!role) return NextResponse.json({ error: "Role required" }, { status: 400 });
   if (!firstName || !lastName) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
-  const supabase = await createServerSupabase();
+  const supabase = createAdminSupabase();
 
   const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
     data: {
