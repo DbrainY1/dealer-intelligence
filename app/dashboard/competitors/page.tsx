@@ -176,19 +176,21 @@ export default async function CompetitorsPage() {
   }));
 
   return (
-    <CompetitorsPageClient
-      scorecards={scorecards.map(({ dealer, count, sold, added, removed }) => ({
-        id: dealer.id,
-        name: dealer.name,
-        count,
-        sold,
-        added,
-        removed,
-      }))}
-      dealers={dealers}
-      snapshots={allSnapshots}
-      eventList={eventList}
-      vehicleMap={Object.fromEntries(vehicleMap)}
-    />
+    <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
+      <CompetitorsPageClient
+        scorecards={scorecards.map(({ dealer, count, sold, added, removed }) => ({
+          id: dealer.id,
+          name: dealer.name,
+          count,
+          sold,
+          added,
+          removed,
+        }))}
+        dealers={dealers}
+        snapshots={allSnapshots}
+        eventList={eventList}
+        vehicleMap={Object.fromEntries(vehicleMap)}
+      />
+    </RoleGuard>
   );
 }

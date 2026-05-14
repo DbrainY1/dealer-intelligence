@@ -6,11 +6,7 @@ import type { ScrapeLog } from "@/types";
 const ROLES = [
   { value: "developer", label: "Developer", color: "bg-purple-900 text-purple-300", description: "Full system access including data sources, user management, and system configuration." },
   { value: "dealer_principal", label: "Dealer Principal", color: "bg-blue-900 text-blue-300", description: "Full market intel and competitor data across all locations. No system configuration." },
-  { value: "store_manager", label: "Store Manager", color: "bg-cyan-900 text-cyan-300", description: "Single location access. Inventory and monthly performance data only." },
-  { value: "finance_company", label: "Finance Company", color: "bg-emerald-900 text-emerald-300", description: "Market-level pricing trends and inventory data. No individual store operations." },
-  { value: "investor", label: "Investor", color: "bg-amber-900 text-amber-300", description: "Market health and trend data. Read only. No operational data." },
-  { value: "researcher", label: "Researcher", color: "bg-orange-900 text-orange-300", description: "Historical data and export access. Dealer data anonymized by default." },
-  { value: "finance_manager", label: "Finance Manager", color: "bg-rose-900 text-rose-300", description: "Store financials and inventory access. No market intel." },
+  { value: "viewer", label: "Viewer", color: "bg-gray-700 text-gray-300", description: "Read-only access to all dashboard pages. Cannot modify settings or invite users." },
 ];
 
 function getStatusBadge(runAt: string, status: string) {
