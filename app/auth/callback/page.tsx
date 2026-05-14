@@ -17,37 +17,80 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Parse tokens from URL hash on mount
+  // Parse tokens from URL (PKCE or implicit flow) on mount
   useEffect(() => {
     async function handleAuthCallback() {
       try {
-        // Parse hash fragment for Supabase auth tokens
+        // Detect flow type: PKCE (?code=...) or implicit (#access_token=...)
+        const urlParams = new URLSearchParams(window.location.search)
         const hashParams = new URLSearchParams(window.location.hash.substring(1))
-        const accessToken = hashParams.get('access_token')
-        const refreshToken = hashParams.get('refresh_token')
-        const type = hashParams.get('type') as AuthType
+        
+        const pkceCode = urlParams.get('code')
+        const implicitAccessToken = hashParams.get('access_token')
+        const implicitRefreshToken = hashParams.get('refresh_token')
+        const hashType = hashParams.get('type') as AuthType
+        const queryType = urlParams.get('type') as AuthType
 
-        if (!accessToken || !refreshToken) {
+        let sessionData
+        let determinedAuthType: AuthType = hashType || queryType || null
+
+        // PKCE flow: ?code=<uuid>
+        if (pkceCode) {
+          console.log('PKCE flow detected, exchanging code for session')
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(pkceCode)
+
+          if (exchangeError) {
+            console.error('PKCE exchange error:', exchangeError)
+            setError('This link has expired or is invalid. Please request a new one.')
+            setLoading(false)
+            return
+          }
+
+          sessionData = data
+
+          // If type wasn't in URL params, infer from user creation time
+          if (!determinedAuthType && sessionData.user) {
+            const createdAt = new Date(sessionData.user.created_at).getTime()
+            const lastSignIn = sessionData.user.last_sign_in_at 
+              ? new Date(sessionData.user.last_sign_in_at).getTime() 
+              : null
+
+            // If last_sign_in_at equals created_at (or is null/very close), this is likely an invite
+            // Otherwise it's a password reset
+            if (!lastSignIn || Math.abs(lastSignIn - createdAt) < 5000) {
+              determinedAuthType = 'invite'
+            } else {
+              determinedAuthType = 'recovery'
+            }
+          }
+        }
+        // Implicit flow: #access_token=...
+        else if (implicitAccessToken && implicitRefreshToken) {
+          console.log('Implicit flow detected, setting session from tokens')
+          const { data, error: sessionError } = await supabase.auth.setSession({
+            access_token: implicitAccessToken,
+            refresh_token: implicitRefreshToken,
+          })
+
+          if (sessionError) {
+            console.error('Implicit session error:', sessionError)
+            setError('This link has expired. Ask your admin to send a new invite.')
+            setLoading(false)
+            return
+          }
+
+          sessionData = data
+        }
+        // Neither flow detected
+        else {
+          console.error('No valid auth flow detected in URL')
           setError('Invalid or expired link. Please request a new invite or password reset.')
           setLoading(false)
           return
         }
 
-        // Set session from magic link tokens
-        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        })
-
-        if (sessionError) {
-          console.error('Session error:', sessionError)
-          setError('This link has expired. Ask your admin to send a new invite.')
-          setLoading(false)
-          return
-        }
-
-        // Get user email from session
-        const userEmail = sessionData.session?.user?.email
+        // Get user email from session (works for both flows)
+        const userEmail = sessionData?.session?.user?.email
         if (!userEmail) {
           setError('Could not retrieve user information. Please try again.')
           setLoading(false)
@@ -55,7 +98,7 @@ export default function AuthCallbackPage() {
         }
 
         setEmail(userEmail)
-        setAuthType(type)
+        setAuthType(determinedAuthType)
         setLoading(false)
       } catch (err) {
         console.error('Auth callback error:', err)
