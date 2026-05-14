@@ -1,7 +1,26 @@
-import { createAdminSupabase } from "@/lib/supabase-server";
+import { createAdminSupabase, createServerSupabase } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
+  // Authentication check: require logged-in developer
+  const serverSupabase = await createServerSupabase();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Check user_roles table for developer role
+  const { data: userRole } = await serverSupabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!userRole || userRole.role !== 'developer') {
+    return NextResponse.json({ error: "Forbidden: Only developers can invite users" }, { status: 403 });
+  }
+
   const formData = await req.formData();
 
   const email = formData.get("email") as string;
@@ -16,6 +35,12 @@ export async function POST(req: Request) {
   if (!role) return NextResponse.json({ error: "Role required" }, { status: 400 });
   if (!firstName || !lastName) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
+  // Validate role is one of the allowed values
+  const validRoles = ['developer', 'dealer_principal', 'viewer'];
+  if (!validRoles.includes(role)) {
+    return NextResponse.json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` }, { status: 400 });
+  }
+
   const supabase = createAdminSupabase();
 
   const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
@@ -24,10 +49,12 @@ export async function POST(req: Request) {
       last_name: lastName,
       organization: organization ?? "",
       phone: phone ?? "",
-      role: role,
+      role: role, // Will be used by /auth/callback to create user_roles entry
       notes: notes ?? "",
       invited_at: new Date().toISOString(),
+      invited_by: user.id, // Track who sent the invite
     },
+    redirectTo: `${new URL(req.url).origin}/auth/callback`,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

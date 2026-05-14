@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { createServerSupabase } from "@/lib/supabase-server";
+import RoleGuard from "@/components/RoleGuard";
 import CompareClient from "./CompareClient";
 import type { Dealer, InventorySnapshot } from "@/types";
 import type { DealerStat } from "./CompareClient";
@@ -113,10 +114,12 @@ export default async function ComparePage() {
   );
 
   return (
-    <CompareClient
-      dealers={dealerList}
-      dealerStats={dealerStats}
-      trendSnapshots={trendSnapshots}
-    />
+    <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
+      <CompareClient
+        dealers={dealerList}
+        dealerStats={dealerStats}
+        trendSnapshots={trendSnapshots}
+      />
+    </RoleGuard>
   );
 }
