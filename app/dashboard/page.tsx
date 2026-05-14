@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { createServerSupabase } from "@/lib/supabase-server";
+import RoleGuard from "@/components/RoleGuard";
 import type { Dealer } from "@/types";
 import MarketCharts from "./MarketCharts";
 import type { ReactNode } from "react";
@@ -276,85 +277,87 @@ export default async function DashboardPage() {
   const fmtPct = (v: number | null) => (v === null ? "N/A" : `${v.toFixed(1)}%`);
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-white text-xl font-bold">
-        Market Overview —{" "}
-        {today.toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-          timeZone: "America/Los_Angeles",
-        })}
-      </h1>
+    <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
+      <div className="p-6 space-y-6">
+        <h1 className="text-white text-xl font-bold">
+          Market Overview —{" "}
+          {today.toLocaleDateString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+            timeZone: "America/Los_Angeles",
+          })}
+        </h1>
 
-      {/* 2×2 Intel Cards */}
-      <div className="grid grid-cols-2 gap-3 max-w-[900px]">
-        <IntelCard
-          accent="bg-blue-500"
-          label="Active Dealers"
-          primary={activeDealersToday.toString()}
-          line1Label="Last mo"
-          line1Value={fmtCount(lastMoStats?.activeDealers ?? null)}
-          line1Delta={
-            <Delta current={activeDealersToday} prior={lastMoStats?.activeDealers ?? null} type="count" />
-          }
-          line2Label="Last yr"
-          line2Value={fmtCount(lastYrStats?.activeDealers ?? null)}
-          line2Delta={
-            <Delta current={activeDealersToday} prior={lastYrStats?.activeDealers ?? null} type="count" />
-          }
-        />
+        {/* 2×2 Intel Cards */}
+        <div className="grid grid-cols-2 gap-3 max-w-[900px]">
+          <IntelCard
+            accent="bg-blue-500"
+            label="Active Dealers"
+            primary={activeDealersToday.toString()}
+            line1Label="Last mo"
+            line1Value={fmtCount(lastMoStats?.activeDealers ?? null)}
+            line1Delta={
+              <Delta current={activeDealersToday} prior={lastMoStats?.activeDealers ?? null} type="count" />
+            }
+            line2Label="Last yr"
+            line2Value={fmtCount(lastYrStats?.activeDealers ?? null)}
+            line2Delta={
+              <Delta current={activeDealersToday} prior={lastYrStats?.activeDealers ?? null} type="count" />
+            }
+          />
 
-        <IntelCard
-          accent="bg-violet-500"
-          label="Inventory Level"
-          primary={totalInventory.toLocaleString()}
-          line1Label="Last mo"
-          line1Value={fmtCount(lastMoStats?.inventory ?? null)}
-          line1Delta={
-            <Delta current={totalInventory} prior={lastMoStats?.inventory ?? null} type="count" />
-          }
-          line2Label="Last yr"
-          line2Value={fmtCount(lastYrStats?.inventory ?? null)}
-          line2Delta={
-            <Delta current={totalInventory} prior={lastYrStats?.inventory ?? null} type="count" />
-          }
-        />
+          <IntelCard
+            accent="bg-violet-500"
+            label="Inventory Level"
+            primary={totalInventory.toLocaleString()}
+            line1Label="Last mo"
+            line1Value={fmtCount(lastMoStats?.inventory ?? null)}
+            line1Delta={
+              <Delta current={totalInventory} prior={lastMoStats?.inventory ?? null} type="count" />
+            }
+            line2Label="Last yr"
+            line2Value={fmtCount(lastYrStats?.inventory ?? null)}
+            line2Delta={
+              <Delta current={totalInventory} prior={lastYrStats?.inventory ?? null} type="count" />
+            }
+          />
 
-        <IntelCard
-          accent="bg-emerald-500"
-          label="Avg List Price"
-          primary={`$${avgPrice.toLocaleString()}`}
-          line1Label="Last mo"
-          line1Value={fmtPrice(lastMoStats?.avgPrice ?? null)}
-          line1Delta={
-            <Delta current={avgPrice} prior={lastMoStats?.avgPrice ?? null} type="price" />
-          }
-          line2Label="Last yr"
-          line2Value={fmtPrice(lastYrStats?.avgPrice ?? null)}
-          line2Delta={
-            <Delta current={avgPrice} prior={lastYrStats?.avgPrice ?? null} type="price" />
-          }
-        />
+          <IntelCard
+            accent="bg-emerald-500"
+            label="Avg List Price"
+            primary={`$${avgPrice.toLocaleString()}`}
+            line1Label="Last mo"
+            line1Value={fmtPrice(lastMoStats?.avgPrice ?? null)}
+            line1Delta={
+              <Delta current={avgPrice} prior={lastMoStats?.avgPrice ?? null} type="price" />
+            }
+            line2Label="Last yr"
+            line2Value={fmtPrice(lastYrStats?.avgPrice ?? null)}
+            line2Delta={
+              <Delta current={avgPrice} prior={lastYrStats?.avgPrice ?? null} type="price" />
+            }
+          />
 
-        <IntelCard
-          accent="bg-amber-500"
-          label="Sell-Through Pace"
-          primary={fmtPct(sellThroughToday)}
-          line1Label="Last mo"
-          line1Value={fmtPct(sellThroughLastMo)}
-          line1Delta={
-            <Delta current={sellThroughToday} prior={sellThroughLastMo} type="pct" />
-          }
-          line2Label="Last yr"
-          line2Value={fmtPct(sellThroughLastYr)}
-          line2Delta={
-            <Delta current={sellThroughToday} prior={sellThroughLastYr} type="pct" />
-          }
-        />
+          <IntelCard
+            accent="bg-emerald-500"
+            label="Sell-Through Pace"
+            primary={fmtPct(sellThroughToday)}
+            line1Label="Last mo"
+            line1Value={fmtPct(sellThroughLastMo)}
+            line1Delta={
+              <Delta current={sellThroughToday} prior={sellThroughLastMo} type="pct" />
+            }
+            line2Label="Last yr"
+            line2Value={fmtPct(sellThroughLastYr)}
+            line2Delta={
+              <Delta current={sellThroughToday} prior={sellThroughLastYr} type="pct" />
+            }
+          />
+        </div>
+
+        <MarketCharts byDealer={byDealer} dealers={dealerList} />
       </div>
-
-      <MarketCharts byDealer={byDealer} dealers={dealerList} />
-    </div>
+    </RoleGuard>
   );
 }
