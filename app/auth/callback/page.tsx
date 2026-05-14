@@ -21,48 +21,44 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     async function handleAuthCallback() {
       try {
-        // Detect flow type: PKCE (?code=...) or implicit (#access_token=...)
+        // Detect flow type: email link (?token_hash=...) or implicit (#access_token=...)
         const urlParams = new URLSearchParams(window.location.search)
         const hashParams = new URLSearchParams(window.location.hash.substring(1))
         
-        const pkceCode = urlParams.get('code')
+        const tokenHash = urlParams.get('token_hash')
+        const urlType = urlParams.get('type') as AuthType
         const implicitAccessToken = hashParams.get('access_token')
         const implicitRefreshToken = hashParams.get('refresh_token')
         const hashType = hashParams.get('type') as AuthType
-        const queryType = urlParams.get('type') as AuthType
 
         let sessionData
-        let determinedAuthType: AuthType = hashType || queryType || null
+        let determinedAuthType: AuthType = hashType || urlType || null
 
-        // PKCE flow: ?code=<uuid>
-        if (pkceCode) {
-          console.log('PKCE flow detected, exchanging code for session')
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(pkceCode)
+        // Email link flow: ?token_hash=...&type=invite/recovery
+        if (tokenHash && urlType) {
+          // Validate type is one we support
+          if (urlType !== 'invite' && urlType !== 'recovery') {
+            console.error(`Unsupported link type: ${urlType}`)
+            setError('Unsupported link type.')
+            setLoading(false)
+            return
+          }
 
-          if (exchangeError) {
-            console.error('PKCE exchange error:', exchangeError)
+          console.log(`Email auth flow detected: ${urlType}`)
+          const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: urlType
+          })
+
+          if (verifyError) {
+            console.error('verifyOtp error:', verifyError)
             setError('This link has expired or is invalid. Please request a new one.')
             setLoading(false)
             return
           }
 
           sessionData = data
-
-          // If type wasn't in URL params, infer from user creation time
-          if (!determinedAuthType && sessionData.user) {
-            const createdAt = new Date(sessionData.user.created_at).getTime()
-            const lastSignIn = sessionData.user.last_sign_in_at 
-              ? new Date(sessionData.user.last_sign_in_at).getTime() 
-              : null
-
-            // If last_sign_in_at equals created_at (or is null/very close), this is likely an invite
-            // Otherwise it's a password reset
-            if (!lastSignIn || Math.abs(lastSignIn - createdAt) < 5000) {
-              determinedAuthType = 'invite'
-            } else {
-              determinedAuthType = 'recovery'
-            }
-          }
+          determinedAuthType = urlType  // Type is explicit in URL
         }
         // Implicit flow: #access_token=...
         else if (implicitAccessToken && implicitRefreshToken) {
