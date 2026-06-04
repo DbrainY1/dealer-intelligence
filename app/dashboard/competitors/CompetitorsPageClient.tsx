@@ -19,6 +19,7 @@ interface Props {
   dealers: Dealer[];
   snapshots: InventorySnapshot[];
   eventList: InventoryEvent[];
+  estimatedSales: InventoryEvent[];
   vehicleMap?: Record<number, VehicleInfo>;
 }
 
@@ -27,6 +28,7 @@ export default function CompetitorsPageClient({
   dealers,
   snapshots,
   eventList,
+  estimatedSales,
   vehicleMap = {},
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
@@ -40,6 +42,9 @@ export default function CompetitorsPageClient({
   const selectedDealers = dealers.filter((d) => selectedIds.has(d.id));
   const filteredSnapshots = snapshots.filter((s) => selectedIds.has(s.dealer_id));
   const filteredEvents = eventList.filter((e) => selectedIds.has(e.to_dealer_id || 0));
+  // Projected sold (Confirmed Sold + Pending Sale) is attributed to the selling
+  // dealer, so it filters on from_dealer_id rather than to_dealer_id.
+  const filteredSold = estimatedSales.filter((e) => selectedIds.has(e.from_dealer_id || 0));
 
 
 
@@ -104,7 +109,7 @@ export default function CompetitorsPageClient({
       {/* Estimated Sales */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-white font-semibold mb-4">
-          Estimated Sales (Last 7 Days) — {filteredEvents.filter(e => e.event_type === "sold").length} sold
+          Estimated Sales (Last 7 Days) — {filteredSold.length} sold
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left text-gray-300">
@@ -156,19 +161,18 @@ export default function CompetitorsPageClient({
               </tr>
             </thead>
             <tbody>
-              {filteredEvents
-                .filter(e => e.event_type === "sold")
+              {filteredSold
                 .sort((a, b) => {
                   // Apply custom sort if a column is selected
                   if (sortColumn) {
                     let aVal: any, bVal: any;
                     const vehA = vehicleMap[a.vehicle_id];
                     const vehB = vehicleMap[b.vehicle_id];
-                    
+
                     switch (sortColumn) {
                       case "dealer":
-                        aVal = dealers.find(d => d.id === a.to_dealer_id)?.name || "";
-                        bVal = dealers.find(d => d.id === b.to_dealer_id)?.name || "";
+                        aVal = dealers.find(d => d.id === a.from_dealer_id)?.name || "";
+                        bVal = dealers.find(d => d.id === b.from_dealer_id)?.name || "";
                         break;
                       case "year":
                         aVal = vehA?.year || 0;
@@ -221,7 +225,7 @@ export default function CompetitorsPageClient({
                       onClick={() => setSelectedVehicleId(e.vehicle_id)}
                     >
                       <td className="px-4 py-3 font-semibold text-orange-500">
-                        {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
+                        {dealers.find((d) => d.id === e.from_dealer_id)?.name ?? `Dealer ${e.from_dealer_id}`}
                       </td>
                       <td className="px-4 py-3 text-orange-400">{veh?.year || "—"}</td>
                       <td className="px-4 py-3 text-orange-400">{veh?.make || "—"}</td>
@@ -237,7 +241,7 @@ export default function CompetitorsPageClient({
                     </tr>
                   );
                 })}
-              {filteredEvents.filter(e => e.event_type === "sold").length === 0 && (
+              {filteredSold.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                     No sales in selected dealers

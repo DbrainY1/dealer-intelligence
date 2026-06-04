@@ -48,7 +48,7 @@ export interface InventoryEvent {
   to_dealer_id: number | null;
   dealer_id?: number; // Deprecated, use to_dealer_id
   dealer_group_id: number | null;
-  event_type: "added" | "removed" | "price_changed" | "sold" | "transferred";
+  event_type: "added" | "removed" | "price_changed" | "sold" | "transferred" | "pending_removal";
   event_date: string;
   from_dealer_id: number | null;
   old_price: number | null;

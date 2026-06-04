@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
-import type { Dealer } from "@/types";
-import MarketCharts from "./MarketCharts";
+import { dedupeProjectedSold } from "@/lib/projected-sold";
+import { pacificDateStr } from "@/lib/dates";
+import type { Dealer, InventoryEvent } from "@/types";
+import MarketCharts, { type DailySoldVehicle } from "./MarketCharts";
 import type { ReactNode } from "react";
 
 // ── Local UI helpers ──────────────────────────────────────────────────────────
@@ -164,6 +166,110 @@ export default async function DashboardPage() {
   const soldLastMo = sumSoldForMonth(lastMoMonthStartStr);
   const soldLastYr = sumSoldForMonth(lastYrMonthStartStr);
 
+  // Estimated Sales / Daily Sold implements the V2 read-layer projected-sold rule
+  // from DBRAIN_V2_CUTOVER_NOTES.md and matches the DBRAIN Daily Market Movement
+  // email logic.
+  // Confirmed Sold + Pending Sale, deduplicated by vehicle, sold preferred,
+  // transfers excluded, from_dealer_id attribution.
+  // MTD Sold continues to use monthly_sales / resolved_at and is unchanged.
+  //
+  // Daily Sold is anchored to the current Pacific calendar date to match the
+  // DBRAIN email's date axis.
+  const dailyDateStr = pacificDateStr();
+  const DAILY_COLS = "id, vehicle_id, event_type, event_date, from_dealer_id, price_at_listing, last_seen_price";
+
+  const { data: dailySoldRaw } = await supabase
+    .from("inventory_events")
+    .select(DAILY_COLS)
+    .eq("event_type", "sold")
+    .eq("event_date", dailyDateStr)
+    .not("from_dealer_id", "is", null);
+  const { data: dailyPendingRaw } = await supabase
+    .from("inventory_events")
+    .select(DAILY_COLS)
+    .eq("event_type", "pending_removal")
+    .is("resolved_at", null)
+    .eq("event_date", dailyDateStr)
+    .not("from_dealer_id", "is", null);
+  const { data: dailyTransferredRaw } = await supabase
+    .from("inventory_events")
+    .select("vehicle_id")
+    .eq("event_type", "transferred")
+    .eq("event_date", dailyDateStr);
+
+  // 1,000-row pagination canary: PostgREST caps responses at 1,000 rows. If any
+  // of these hits the cap the Daily Sold count is silently truncated.
+  for (const [name, rows] of [
+    ["sold", dailySoldRaw ?? []],
+    ["pending_removal", dailyPendingRaw ?? []],
+    ["transferred", dailyTransferredRaw ?? []],
+  ] as const) {
+    if (rows.length === 1000) {
+      console.warn(`[market-overview] PAGINATION CANARY: daily ${name} query returned exactly 1000 rows — Daily Sold count may be truncated.`);
+    }
+  }
+
+  const dailyTransferIds = new Set<number>(
+    (dailyTransferredRaw ?? []).map((r: { vehicle_id: number }) => r.vehicle_id).filter((v) => v != null)
+  );
+  const dailyProjected = dedupeProjectedSold(
+    (dailySoldRaw ?? []) as InventoryEvent[],
+    (dailyPendingRaw ?? []) as InventoryEvent[],
+    dailyTransferIds
+  );
+
+  // Vehicle-level detail (year/make/model/vin + latest mileage) for the
+  // Daily Sold expansion rows.
+  const dailyVehicleIds = [...new Set(dailyProjected.map((e) => e.vehicle_id))];
+  const dailyVehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; vin: string | null; mileage: number | null }>();
+  for (let i = 0; i < dailyVehicleIds.length; i += 100) {
+    const chunk = dailyVehicleIds.slice(i, i + 100);
+    const { data: vehicles } = await supabase
+      .from("vehicles")
+      .select("id, year, make, model, vin")
+      .in("id", chunk);
+    (vehicles ?? []).forEach((v: { id: number; year: number | null; make: string | null; model: string | null; vin: string | null }) =>
+      dailyVehicleMap.set(v.id, { year: v.year, make: v.make, model: v.model, vin: v.vin, mileage: null })
+    );
+  }
+  for (let i = 0; i < dailyVehicleIds.length; i += 100) {
+    const chunk = dailyVehicleIds.slice(i, i + 100);
+    const { data: snaps } = await supabase
+      .from("inventory_snapshots")
+      .select("vehicle_id, mileage")
+      .in("vehicle_id", chunk)
+      .order("snapshot_date", { ascending: false });
+    const seen = new Set<number>();
+    (snaps ?? []).forEach((s: { vehicle_id: number; mileage: number | null }) => {
+      if (!seen.has(s.vehicle_id)) {
+        const existing = dailyVehicleMap.get(s.vehicle_id);
+        if (existing) existing.mileage = s.mileage ?? null;
+        seen.add(s.vehicle_id);
+      }
+    });
+  }
+
+  // Group Daily Sold rows + vehicle detail by selling dealer.
+  const dailyByDealer = new Map<number, { count: number; vehicles: DailySoldVehicle[] }>();
+  for (const e of dailyProjected) {
+    const did = e.from_dealer_id;
+    if (did == null) continue;
+    const veh = dailyVehicleMap.get(e.vehicle_id);
+    const entry = dailyByDealer.get(did) ?? { count: 0, vehicles: [] };
+    entry.count += 1;
+    entry.vehicles.push({
+      year: veh?.year ?? null,
+      make: veh?.make ?? null,
+      model: veh?.model ?? null,
+      trim: null, // Not captured upstream; intentionally blank (matches DBRAIN email).
+      mileage: veh?.mileage ?? null,
+      vin: veh?.vin ?? null,
+      price: e.last_seen_price ?? e.price_at_listing ?? null,
+      date: e.event_date,
+    });
+    dailyByDealer.set(did, entry);
+  }
+
   // Per-dealer today: latest snapshot count + sales + added + transferred (MTD)
   const byDealer = await Promise.all(
     dealerList.map(async (d) => {
@@ -175,7 +281,7 @@ export default async function DashboardPage() {
         .limit(1)
         .single();
 
-      if (!latestDate) return { name: d.name, count: 0, sold: 0, added: 0, transferred: 0 };
+      if (!latestDate) return { name: d.name, count: 0, sold: 0, added: 0, transferred: 0, dailySold: dailyByDealer.get(d.id)?.count ?? 0, dailySoldVehicles: dailyByDealer.get(d.id)?.vehicles ?? [] };
 
       const { count } = await supabase
         .from("inventory_snapshots")
@@ -211,6 +317,8 @@ export default async function DashboardPage() {
         sold: soldByDealer?.units_sold ?? 0,
         added: addedEvents?.length ?? 0,
         transferred: transferredEvents?.length ?? 0,
+        dailySold: dailyByDealer.get(d.id)?.count ?? 0,
+        dailySoldVehicles: dailyByDealer.get(d.id)?.vehicles ?? [],
       };
     })
   );

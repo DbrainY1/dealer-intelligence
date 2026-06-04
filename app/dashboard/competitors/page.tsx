@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
 import CompetitorsPageClient from "./CompetitorsPageClient";
+import { dedupeProjectedSold } from "@/lib/projected-sold";
+import { pacificDaysAgoStr } from "@/lib/dates";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
 const COMPETITOR_NAMES = ["Baja", "Newport", "Ariana", "Auto Vision", "Boktors", "Charlie", "Emporio", "Globul", "Hot Deals", "One Motors", "Platinum", "Queen", "Nellis", "RevEuro"];
@@ -52,8 +54,63 @@ export default async function CompetitorsPage() {
 
   const eventList: InventoryEvent[] = weeklyEvents ?? [];
 
+  // Estimated Sales / Daily Sold implements the V2 read-layer projected-sold rule
+  // from DBRAIN_V2_CUTOVER_NOTES.md and matches the DBRAIN Daily Market Movement
+  // email logic.
+  // Confirmed Sold + Pending Sale, deduplicated by vehicle, sold preferred,
+  // transfers excluded, from_dealer_id attribution.
+  // MTD Sold continues to use monthly_sales / resolved_at and is unchanged.
+  //
+  // Same trailing Last-7-Days window as above, anchored to the Pacific calendar
+  // date so this matches the DBRAIN email's date axis.
+  const soldWindowStartStr = pacificDaysAgoStr(7);
+  const SOLD_COLS = "id, vehicle_id, event_type, event_date, from_dealer_id, price_at_listing, last_seen_price";
+
+  // Confirmed Sold: event_type='sold', attributed to the selling (from) dealer.
+  const { data: soldRowsRaw } = await supabase
+    .from("inventory_events")
+    .select(SOLD_COLS)
+    .in("from_dealer_id", dealerIds)
+    .eq("event_type", "sold")
+    .gte("event_date", soldWindowStartStr);
+  const soldRows = (soldRowsRaw ?? []) as InventoryEvent[];
+
+  // Pending Sale: event_type='pending_removal' that has not yet resolved.
+  const { data: pendingRowsRaw } = await supabase
+    .from("inventory_events")
+    .select(SOLD_COLS)
+    .in("from_dealer_id", dealerIds)
+    .eq("event_type", "pending_removal")
+    .is("resolved_at", null)
+    .gte("event_date", soldWindowStartStr);
+  const pendingRows = (pendingRowsRaw ?? []) as InventoryEvent[];
+
+  // Transferred vehicles in the window are excluded from projected sold.
+  const { data: transferredRowsRaw } = await supabase
+    .from("inventory_events")
+    .select("vehicle_id")
+    .eq("event_type", "transferred")
+    .gte("event_date", soldWindowStartStr);
+  const transferredVehicleIds = new Set<number>(
+    (transferredRowsRaw ?? []).map((r: { vehicle_id: number }) => r.vehicle_id).filter((v) => v != null)
+  );
+
+  // 1,000-row pagination canary: PostgREST caps responses at 1,000 rows. If any
+  // of these hits the cap the projected-sold count is silently truncated.
+  for (const [name, rows] of [
+    ["sold", soldRows],
+    ["pending_removal", pendingRows],
+    ["transferred", transferredRowsRaw ?? []],
+  ] as const) {
+    if (rows.length === 1000) {
+      console.warn(`[market-pulse] PAGINATION CANARY: ${name} query returned exactly 1000 rows — projected-sold count may be truncated.`);
+    }
+  }
+
+  const estimatedSales = dedupeProjectedSold(soldRows, pendingRows, transferredVehicleIds);
+
   // Fetch vehicle data for events (year, make, model, vin, mileage)
-  const vehicleIds = [...new Set(eventList.map(e => e.vehicle_id))];
+  const vehicleIds = [...new Set([...eventList, ...estimatedSales].map(e => e.vehicle_id))];
   let vehicleMap = new Map<number, { year: number | null; make: string | null; model: string | null; mileage: number | null; vin: string | null }>();
   if (vehicleIds.length > 0) {
     // Batch fetch vehicles in chunks
@@ -189,6 +246,7 @@ export default async function CompetitorsPage() {
         dealers={dealers}
         snapshots={allSnapshots}
         eventList={eventList}
+        estimatedSales={estimatedSales}
         vehicleMap={Object.fromEntries(vehicleMap)}
       />
     </RoleGuard>
