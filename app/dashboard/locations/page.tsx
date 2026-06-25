@@ -8,8 +8,39 @@ import type { DealerMapData } from "./LocationsMap";
 export default async function LocationsPage() {
   const supabase = await createServerSupabase();
 
-  const { data: dealers } = await supabase.from("dealers").select("id, name");
-  const dealerList = (dealers ?? []) as { id: number; name: string }[];
+  // DB-driven marker source. Visibility: include scrape_enabled TRUE and NULL
+  // (HomeNet dealers #1/#2/#3 are NULL and must stay visible), exclude FALSE
+  // (intake dealers like #16 Las Vegas Auto Sports, #30 Zara, #31 United
+  // Nissan). `.neq(false)` would drop NULL rows — do not use it.
+  type DealerRow = {
+    id: number;
+    name: string;
+    latitude: number | string | null;
+    longitude: number | string | null;
+    dealer_group_id: number | null;
+    address: string | null;
+    website_url: string | null;
+  };
+  const { data: dealers } = await supabase
+    .from("dealers")
+    .select("id, name, latitude, longitude, dealer_group_id, address, website_url")
+    .or("scrape_enabled.eq.true,scrape_enabled.is.null");
+
+  // Skip rows with missing / non-finite coordinates so the map never renders a
+  // pin at (NaN, NaN) or crashes. (Supabase may return numeric columns as
+  // strings, so coerce before the finiteness check.)
+  const visibleDealers = (dealers ?? []) as DealerRow[];
+  const dealerList = visibleDealers.filter((d) => {
+    const lat = Number(d.latitude);
+    const lng = Number(d.longitude);
+    return d.latitude != null && d.longitude != null && Number.isFinite(lat) && Number.isFinite(lng);
+  });
+  const skippedNoCoords = visibleDealers.length - dealerList.length;
+  if (skippedNoCoords > 0) {
+    console.warn(
+      `[locations] skipped ${skippedNoCoords} visible dealer(s) with missing/invalid coordinates`
+    );
+  }
   const dealerIds = dealerList.map((d) => d.id);
 
   // Latest inventory snapshot per dealer
@@ -79,7 +110,22 @@ export default async function LocationsPage() {
         ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length)
         : null;
     const newListings7d = newListingsByDealer.get(d.id) ?? 0;
-    return { name: d.name, inStock, mtdSold, avgListPrice, daysOfSupply, newListings7d };
+    // Metrics are keyed by d.id above; coordinates/group/identity come from the
+    // same dealer row — so the client joins metrics ↔ pins by id (no name join).
+    return {
+      id: d.id,
+      name: d.name,
+      latitude: Number(d.latitude),
+      longitude: Number(d.longitude),
+      dealerGroupId: d.dealer_group_id,
+      address: d.address,
+      website: d.website_url,
+      inStock,
+      mtdSold,
+      avgListPrice,
+      daysOfSupply,
+      newListings7d,
+    };
   });
 
   return (
