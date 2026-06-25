@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface DealerMapData {
+  id: number;
   name: string;
+  latitude: number;
+  longitude: number;
+  dealerGroupId: number | null;
+  address: string | null;
+  website: string | null;
   inStock: number;
   mtdSold: number;
   avgListPrice: number | null;
@@ -11,44 +17,16 @@ export interface DealerMapData {
   newListings7d: number;
 }
 
-interface Dealer {
-  name: string;
-  lat: number;
-  lng: number;
-  tracked: boolean;
-  group?: string;
-  address: string;
-  website?: string;
+// Group → label/color, derived from public.dealers.dealer_group_id.
+// 1 = Baja Auto Group (blue), 3 = Ariana Auto Group (purple), else Competitor
+// (amber). Colors match the previous hardcoded GROUP_COLORS exactly — no pin
+// color drift for the DB-visible dealers.
+const COMPETITOR_COLOR = "#f59e0b";
+function groupInfo(groupId: number | null): { label: string; color: string } {
+  if (groupId === 1) return { label: "Baja Auto Group", color: "#3b82f6" };
+  if (groupId === 3) return { label: "Ariana Auto Group", color: "#8b5cf6" };
+  return { label: "Competitor", color: COMPETITOR_COLOR };
 }
-
-const DEALERS: Dealer[] = [
-  // Baja Auto Group — tracked (own)
-  { name: "Baja East",            lat: 36.146930, lng: -115.101750, tracked: true, group: "Baja Auto Group",   address: "3333 E Fremont St, Las Vegas, NV 89104",       website: "https://www.bajaautos.com" },
-  { name: "Baja West",            lat: 36.161386, lng: -115.206627, tracked: true, group: "Baja Auto Group",   address: "824 S Decatur Blvd, Las Vegas, NV 89107",       website: "https://www.bajaautos.com" },
-  { name: "Newport Motors",       lat: 36.144192, lng: -115.113822, tracked: true, group: "Baja Auto Group",   address: "2711 E Sahara Ave, Las Vegas, NV 89104",         website: "https://www.bajaautos.com" },
-  // Ariana Auto Group — tracked (competitor)
-  { name: "Ariana Motors",        lat: 36.13072,  lng: -115.08514,  tracked: true, group: "Ariana Auto Group", address: "4130 Boulder Hwy, Las Vegas, NV 89121",          website: "https://www.arianamotorslv.com" },
-  { name: "Ariana Motors Nellis", lat: 36.18024,  lng: -115.06133,  tracked: true, group: "Ariana Auto Group", address: "1120 N Nellis Blvd, Las Vegas, NV 89110",        website: "https://www.arianamotorsnellis.com" },
-  { name: "One Motors LV",        lat: 36.14339,  lng: -115.09718,  tracked: true, group: "Ariana Auto Group", address: "3535 Boulder Hwy, Las Vegas, NV 89121",          website: "https://www.onemotorslv.com" },
-  // Tracked competitors
-  { name: "Boktors",              lat: 36.10010,  lng: -115.12265,  tracked: true, address: "1610 E Tropicana Ave, Las Vegas, NV 89119",     website: "https://www.boktors.com" },
-  { name: "Globul Enterprises",   lat: 36.12269,  lng: -115.18959,  tracked: true, address: "3720 S Valley View Blvd, Las Vegas, NV 89103",  website: "https://www.globulenterprises.com" },
-  { name: "Platinum Cars LV",     lat: 36.14400,  lng: -115.09831,  tracked: true, address: "3497 Boulder Hwy, Las Vegas, NV 89121",          website: "https://www.platinumcarslv.com" },
-  { name: "Queen Motorcars",      lat: 36.154688, lng: -115.110070, tracked: true, address: "2925 E Fremont St, Las Vegas, NV 89104",         website: "https://www.queenmotorcars.com" },
-  { name: "Auto Vision LV",       lat: 36.15229,  lng: -115.10936,  tracked: true, address: "3020 E Fremont St, Las Vegas, NV 89104",         website: "https://www.autovisionlv.com" },
-  { name: "Charlie Cheap Car",    lat: 36.144680, lng: -115.208592, tracked: true, address: "5015 W Sahara Ave #127, Las Vegas, NV 89146",    website: "https://www.charliecheapcar.com" },
-  { name: "Hot Deals Auto",       lat: 36.12800,  lng: -115.20850,  tracked: true, address: "3401 S Decatur Blvd, Las Vegas, NV 89102",       website: "https://www.hotdealsauto.com" },
-  { name: "RevEuro",              lat: 36.05766,  lng: -115.17624,  tracked: true, address: "2540 W Warm Springs Rd, Las Vegas, NV 89119",    website: "https://www.reveuro.com" },
-  { name: "Emporio Auto Sales",   lat: 36.151542393765446, lng: -115.10880152883577, tracked: true, address: "3024 E Fremont St, Las Vegas, NV 89104", website: "https://www.emporioautosales.com" },
-  { name: "Las Vegas Mitsubishi", lat: 36.07792075319564,  lng: -115.20852095134063, tracked: true, address: "6165 S Decatur Blvd, Las Vegas, NV 89118", website: "https://www.lasvegasmitsubishi.com" },
-  { name: "Las Vegas Auto Sports",lat: 36.11099245928179,  lng: -115.20436733024083, tracked: true, address: "4365 S Cameron St, Las Vegas, NV 89103",   website: "https://www.lasvegasautosports.com" },
-];
-
-const GROUP_COLORS: Record<string, string> = {
-  "Baja Auto Group":   "#3b82f6",
-  "Ariana Auto Group": "#8b5cf6",
-  default:             "#f59e0b",
-};
 
 // Inline SVG icons — no external dependency
 function IcoBox() {
@@ -188,52 +166,53 @@ export default function LocationsMap({ dealerData }: Props) {
         maxZoom: 19,
       }).addTo(map);
 
+      // DB-driven markers. Each row carries its own coordinates, group, and
+      // metrics — all built per dealer_id in page.tsx — so metrics attach to
+      // pins by id (no name join). All rows here already passed the visibility
+      // gate and the finite-coordinate filter on the server.
       const data        = dealerDataRef.current;
-      const byName      = new Map(data.map((d) => [d.name, d]));
       const allMtd      = data.filter((d) => d.mtdSold > 0).map((d) => d.mtdSold);
       const mktAvgMtd   = allMtd.length > 0 ? allMtd.reduce((a, b) => a + b, 0) / allMtd.length : 0;
       const allPrices   = data.filter((d) => d.avgListPrice != null).map((d) => d.avgListPrice as number);
       const mktAvgPrice = allPrices.length > 0 ? allPrices.reduce((a, b) => a + b, 0) / allPrices.length : 0;
 
-      function popupHtml(dealer: Dealer, color: string) {
-        const group   = dealer.group ? `<div style="color:#9ca3af;font-size:11px;margin-bottom:2px;">${dealer.group}</div>` : "";
-        const website = dealer.website ? `<a href="${dealer.website}" target="_blank" style="color:#60a5fa;font-size:11px;">Visit website →</a>` : "";
+      function popupHtml(dealer: DealerMapData, color: string) {
+        // Preserve prior behavior: only grouped dealers (Baja/Ariana) show a
+        // group label; competitors show none.
+        const info      = groupInfo(dealer.dealerGroupId);
+        const grouped   = dealer.dealerGroupId === 1 || dealer.dealerGroupId === 3;
+        const group     = grouped ? `<div style="color:#9ca3af;font-size:11px;margin-bottom:2px;">${info.label}</div>` : "";
+        const address   = dealer.address ? `<div style="color:#d1d5db;font-size:12px;margin-bottom:6px;">${dealer.address}</div>` : "";
+        const website   = dealer.website ? `<a href="${dealer.website}" target="_blank" style="color:#60a5fa;font-size:11px;">Visit website →</a>` : "";
         return `<div style="font-family:system-ui,sans-serif;min-width:180px;">
           ${group}
           <div style="color:white;font-weight:700;font-size:14px;margin-bottom:4px;">${dealer.name}</div>
-          <div style="color:#d1d5db;font-size:12px;margin-bottom:6px;">${dealer.address}</div>
-          ${dealer.tracked ? `<div style="display:inline-block;background:${color}22;border:1px solid ${color};color:${color};font-size:10px;padding:1px 6px;border-radius:999px;margin-bottom:6px;">Tracked</div>` : ""}
+          ${address}
+          <div style="display:inline-block;background:${color}22;border:1px solid ${color};color:${color};font-size:10px;padding:1px 6px;border-radius:999px;margin-bottom:6px;">Tracked</div>
           ${website}
         </div>`;
       }
 
       // ── Base pins ──────────────────────────────────────────────────────────
-      DEALERS.forEach((dealer) => {
-        const color = GROUP_COLORS[dealer.group ?? ""] ?? GROUP_COLORS.default;
-        const icon  = dealer.tracked
-          ? L.divIcon({
-              className: "",
-              html: `<div style="background:${color};border:2px solid white;border-radius:50%;width:14px;height:14px;box-shadow:0 0 0 3px ${color}55;"></div>`,
-              iconSize: [14, 14], iconAnchor: [7, 7],
-            })
-          : L.divIcon({
-              className: "",
-              html: `<div style="background:#6b7280;border-radius:50%;width:8px;height:8px;border:1px solid #9ca3af;"></div>`,
-              iconSize: [8, 8], iconAnchor: [4, 4],
-            });
-        L.marker([dealer.lat, dealer.lng], { icon })
+      data.forEach((dealer) => {
+        const color = groupInfo(dealer.dealerGroupId).color;
+        const icon  = L.divIcon({
+          className: "",
+          html: `<div style="background:${color};border:2px solid white;border-radius:50%;width:14px;height:14px;box-shadow:0 0 0 3px ${color}55;"></div>`,
+          iconSize: [14, 14], iconAnchor: [7, 7],
+        });
+        L.marker([dealer.latitude, dealer.longitude], { icon })
           .bindPopup(L.popup({ className: "dealer-popup" }).setContent(popupHtml(dealer, color)))
           .addTo(map);
       });
 
       // ── Layer 1 · Inventory Density ────────────────────────────────────────
       const inventoryGroup = L.layerGroup();
-      DEALERS.forEach((dealer) => {
-        const d      = byName.get(dealer.name);
-        const stock  = d?.inStock ?? 0;
+      data.forEach((dealer) => {
+        const stock  = dealer.inStock ?? 0;
         if (stock === 0) return;
-        const color  = GROUP_COLORS[dealer.group ?? ""] ?? GROUP_COLORS.default;
-        L.circle([dealer.lat, dealer.lng], {
+        const color  = groupInfo(dealer.dealerGroupId).color;
+        L.circle([dealer.latitude, dealer.longitude], {
           radius: stock * 10, color, fillColor: color,
           fillOpacity: 0.12, opacity: 0.3, weight: 1,
         })
@@ -244,9 +223,8 @@ export default function LocationsMap({ dealerData }: Props) {
 
       // ── Layer 2 · Sales Velocity ───────────────────────────────────────────
       const velocityGroup = L.layerGroup();
-      DEALERS.forEach((dealer) => {
-        const d       = byName.get(dealer.name);
-        const mtd     = d?.mtdSold ?? 0;
+      data.forEach((dealer) => {
+        const mtd     = dealer.mtdSold ?? 0;
         const color   = mtd > 0 && mtd >= mktAvgMtd ? "#10b981" : "#ef4444";
         const size    = Math.max(22, Math.min(80, mtd * 4 + 18));
         const icon    = L.divIcon({
@@ -254,21 +232,20 @@ export default function LocationsMap({ dealerData }: Props) {
           html: `<div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${color};background:${color}18;animation:velocityPulse 2s ease-in-out infinite;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"></div>`,
           iconSize: [size, size], iconAnchor: [size / 2, size / 2],
         });
-        L.marker([dealer.lat, dealer.lng], { icon, interactive: false, zIndexOffset: -200 }).addTo(velocityGroup);
+        L.marker([dealer.latitude, dealer.longitude], { icon, interactive: false, zIndexOffset: -200 }).addTo(velocityGroup);
       });
       layerGroupsRef.current.velocity = velocityGroup;
 
       // ── Layer 3 · Price Positioning ────────────────────────────────────────
       const priceGroup = L.layerGroup();
-      DEALERS.forEach((dealer) => {
-        const d     = byName.get(dealer.name);
-        const avg   = d?.avgListPrice;
+      data.forEach((dealer) => {
+        const avg   = dealer.avgListPrice;
         let color   = "#6b7280";
         if (avg && mktAvgPrice > 0) {
           const ppi = (avg / mktAvgPrice) * 100;
           color     = ppi < 95 ? "#10b981" : ppi > 110 ? "#ef4444" : "#e5e7eb";
         }
-        L.circleMarker([dealer.lat, dealer.lng], {
+        L.circleMarker([dealer.latitude, dealer.longitude], {
           radius: 7, color: "#1f2937", fillColor: color,
           fillOpacity: 0.95, opacity: 1, weight: 1.5, interactive: false,
         }).addTo(priceGroup);
@@ -277,13 +254,13 @@ export default function LocationsMap({ dealerData }: Props) {
 
       // ── Layer 4 · Market Coverage ──────────────────────────────────────────
       const coverageGroup = L.layerGroup();
-      DEALERS.filter((d) => d.group === "Baja Auto Group").forEach((dealer) => {
+      data.filter((d) => d.dealerGroupId === 1).forEach((dealer) => {
         [
           { radius: 2000,  fillOpacity: 0.06  },
           { radius: 5000,  fillOpacity: 0.04  },
           { radius: 10000, fillOpacity: 0.025 },
         ].forEach(({ radius, fillOpacity }) => {
-          L.circle([dealer.lat, dealer.lng], {
+          L.circle([dealer.latitude, dealer.longitude], {
             radius, color: "#3b82f6", fillColor: "#3b82f6",
             fillOpacity, opacity: 0.18, weight: 1, interactive: false,
           }).addTo(coverageGroup);
@@ -293,14 +270,13 @@ export default function LocationsMap({ dealerData }: Props) {
 
       // ── Layer 5 · Supply Pressure ──────────────────────────────────────────
       const supplyGroup = L.layerGroup();
-      DEALERS.forEach((dealer) => {
-        const d   = byName.get(dealer.name);
-        const dos = d?.daysOfSupply ?? null;
-        const mtd = d?.mtdSold ?? 0;
+      data.forEach((dealer) => {
+        const dos = dealer.daysOfSupply ?? null;
+        const mtd = dealer.mtdSold ?? 0;
         let color = "#6b7280";
         if (mtd > 0 && dos != null)
           color = dos < 30 ? "#3b82f6" : dos <= 60 ? "#10b981" : dos <= 90 ? "#f59e0b" : "#ef4444";
-        L.circleMarker([dealer.lat, dealer.lng], {
+        L.circleMarker([dealer.latitude, dealer.longitude], {
           radius: 14, color, fillColor: color,
           fillOpacity: 0.18, opacity: 0.65, weight: 2, interactive: false,
         }).addTo(supplyGroup);
@@ -309,9 +285,8 @@ export default function LocationsMap({ dealerData }: Props) {
 
       // ── Layer 6 · New Listings ─────────────────────────────────────────────
       const newListingsGroup = L.layerGroup();
-      DEALERS.forEach((dealer) => {
-        const d        = byName.get(dealer.name);
-        const newCount = d?.newListings7d ?? 0;
+      data.forEach((dealer) => {
+        const newCount = dealer.newListings7d ?? 0;
         if (newCount === 0) return;
         const size     = Math.max(20, Math.min(56, newCount * 3 + 14));
         const icon     = L.divIcon({
@@ -319,7 +294,7 @@ export default function LocationsMap({ dealerData }: Props) {
           html: `<div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid #10b981;background:#10b98112;animation:newListingsPulse 1.8s ease-out infinite;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"></div>`,
           iconSize: [size, size], iconAnchor: [size / 2, size / 2],
         });
-        L.marker([dealer.lat, dealer.lng], { icon, interactive: false, zIndexOffset: -150 }).addTo(newListingsGroup);
+        L.marker([dealer.latitude, dealer.longitude], { icon, interactive: false, zIndexOffset: -150 }).addTo(newListingsGroup);
       });
       layerGroupsRef.current.newListings = newListingsGroup;
 
