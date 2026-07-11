@@ -22,7 +22,7 @@ export interface ScorecardRow {
   id: number;
   name: string;
   count: number;
-  sold: number;
+  sold: number | null; // null = no monthly_sales row (render "—"); real 0 stays 0
   added: number | null;
   removed: number | null;
 }
@@ -84,7 +84,7 @@ function SortableCard({
             <p className="text-gray-500 text-xs">in stock</p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-green-400">{row.sold}</p>
+            <p className="text-2xl font-bold text-green-400">{row.sold == null ? "—" : row.sold}</p>
             <p className="text-gray-500 text-xs">MTD sold</p>
           </div>
         </div>
@@ -168,7 +168,8 @@ export default function MarketPulseCards({ scorecards, onSelectionChange }: Mark
   const exportCSV = () => {
     const rows = sorted.filter((s) => selected.has(s.id));
     const header = "Dealer,In Stock,MTD Sold,Added This Week,Removed This Week";
-    const lines = rows.map((s) => `${s.name},${s.count},${s.sold},${s.added},${s.removed}`);
+    // Preserve missing (—) vs real zero: a null monthly_sales row exports as "—", a real 0 exports as 0.
+    const lines = rows.map((s) => `${s.name},${s.count},${s.sold == null ? "—" : s.sold},${s.added},${s.removed}`);
     const csv = [header, ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
