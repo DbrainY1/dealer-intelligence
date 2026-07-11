@@ -7,15 +7,21 @@ import { dedupeProjectedSold } from "@/lib/projected-sold";
 import { pacificDaysAgoStr } from "@/lib/dates";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
-const COMPETITOR_NAMES = ["Baja", "Newport", "Ariana", "Auto Vision", "Boktors", "Charlie", "Emporio", "Globul", "Hot Deals", "One Motors", "Platinum", "Queen", "Nellis", "RevEuro"];
-
 export default async function CompetitorsPage() {
   const supabase = await createServerSupabase();
 
-  const { data: allDealers } = await supabase.from("dealers").select("*");
-  const dealers: Dealer[] = (allDealers ?? []).filter((d: Dealer) =>
-    COMPETITOR_NAMES.some((n) => d.name.toLowerCase().includes(n.toLowerCase()))
-  );
+  // Roster = DB enrollment, same predicate as Locations: scrape_enabled TRUE
+  // (scraper) or NULL (HomeNet feed); FALSE (intake/disabled) is excluded.
+  // Identity is dealer_id throughout — no name-based roster selection.
+  const { data: enrolledDealers } = await supabase
+    .from("dealers")
+    .select("id, name")
+    .or("scrape_enabled.eq.true,scrape_enabled.is.null");
+  // Only id + name are queried and used anywhere downstream (identity is
+  // dealer_id; no consumer reads dealer_group_id), so we do not select an unused
+  // column — cast the id/name rows to Dealer to satisfy existing prop types
+  // (incl. the untouched VIN modal) without widening the query.
+  const dealers = (enrolledDealers ?? []) as Dealer[];
   const dealerIds = dealers.map((d) => d.id);
 
   const ninetyDaysAgo = new Date();
@@ -172,7 +178,7 @@ export default async function CompetitorsPage() {
       .limit(1)
       .single();
 
-    if (!latest) return { dealer: d, count: 0, avg: 0, sold: 0, added: null, removed: null };
+    if (!latest) return { dealer: d, count: 0, avg: 0, sold: soldByDealer.has(d.id) ? (soldByDealer.get(d.id) ?? 0) : null, added: null, removed: null };
 
     // Get the most recent snapshot date strictly before today's
     const { data: priorDateData } = await supabase
@@ -226,7 +232,10 @@ export default async function CompetitorsPage() {
       dealer: d,
       count: count ?? 0,
       avg,
-      sold: soldByDealer.get(d.id) ?? 0,
+      // MTD Sold source (monthly_sales) is unchanged. Distinguish a genuinely
+      // absent monthly_sales row (null → "—") from a real numeric zero: HomeNet
+      // feed dealers #1/#2/#3 have no monthly_sales row and must NOT show a fake 0.
+      sold: soldByDealer.has(d.id) ? (soldByDealer.get(d.id) ?? 0) : null,
       added,
       removed,
     };
