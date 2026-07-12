@@ -26,19 +26,56 @@ export default async function VinDetailPage({ params }: PageProps) {
 
   const vehicleId = vehicle?.id;
 
-  const [{ data: events }, { data: presences }, { data: dealers }] = await Promise.all([
+  const [{ data: events }, { data: snaps }, { data: dealers }] = await Promise.all([
     vehicleId
       ? supabase.from("inventory_events").select("*").eq("vehicle_id", vehicleId).order("event_date", { ascending: true })
       : Promise.resolve({ data: [] }),
+    // Dealer presence/history is derived from inventory_snapshots (authoritative
+    // for presence). vin_presence is a lossy/derived cache that is often empty
+    // for active vehicles, which caused "No presence data" for in-stock VINs.
     vehicleId
-      ? supabase.from("vin_presence").select("*").eq("vehicle_id", vehicleId)
+      ? supabase
+          .from("inventory_snapshots")
+          .select("dealer_id, snapshot_date, status")
+          .eq("vehicle_id", vehicleId)
+          .order("snapshot_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     supabase.from("dealers").select("*"),
   ]);
 
   const eventList: InventoryEvent[] = events ?? [];
-  const presenceList: VinPresenceRow[] = presences ?? [];
   const dealerList: Dealer[] = dealers ?? [];
+  const snapList: { dealer_id: number; snapshot_date: string; status: string | null }[] = snaps ?? [];
+
+  // Group this VIN's snapshots by dealer → first/last seen + whether it is in the
+  // most recent snapshot (currently in stock).
+  const latestSnapshotDate = snapList.length ? snapList[snapList.length - 1].snapshot_date : null;
+  const presenceByDealer = new Map<number, { first: string; last: string; activeNow: boolean }>();
+  for (const s of snapList) {
+    const cur = presenceByDealer.get(s.dealer_id);
+    if (!cur) {
+      presenceByDealer.set(s.dealer_id, { first: s.snapshot_date, last: s.snapshot_date, activeNow: false });
+    } else {
+      cur.last = s.snapshot_date;
+    }
+  }
+  for (const s of snapList) {
+    if (s.snapshot_date === latestSnapshotDate && s.status === "active") {
+      const cur = presenceByDealer.get(s.dealer_id);
+      if (cur) cur.activeNow = true;
+    }
+  }
+  const presenceList: VinPresenceRow[] = Array.from(presenceByDealer.entries()).map(([dealerId, p]) => ({
+    vehicle_id: vehicleId ?? 0,
+    first_seen_dealer_id: dealerId,
+    last_seen_dealer_id: dealerId,
+    first_seen_date: p.first,
+    last_seen_date: p.last,
+    current_status: p.activeNow ? "active" : "inactive",
+  }));
+
+  // Dealer where the VIN is in stock right now (present in the latest snapshot).
+  const currentDealerId = presenceList.find((p) => p.current_status === "active")?.last_seen_dealer_id ?? null;
 
   const getDealerName = (id: number | null) =>
     id != null ? (dealerList.find((d) => d.id === id)?.name ?? `Dealer ${id}`) : "Unknown";
@@ -63,6 +100,13 @@ export default async function VinDetailPage({ params }: PageProps) {
         </h1>
       </div>
 
+      {currentDealerId != null && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 inline-block">
+          <span className="text-green-400 text-sm font-semibold">● Currently in stock</span>
+          <span className="text-gray-400 text-sm ml-2">at {getDealerName(currentDealerId)}</span>
+        </div>
+      )}
+
       {daysOnLot !== null && (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 inline-block">
           <p className="text-gray-400 text-sm">Total Days on Lot</p>
@@ -75,7 +119,12 @@ export default async function VinDetailPage({ params }: PageProps) {
         <div className="space-y-2">
           {presenceList.map((p, i) => (
             <div key={i} className="flex items-center justify-between text-sm bg-gray-800 rounded px-3 py-2">
-              <span className="text-white">{getDealerName(p.last_seen_dealer_id)}</span>
+              <span className="text-white">
+                {getDealerName(p.last_seen_dealer_id)}
+                {p.current_status === "active" && (
+                  <span className="text-green-400 text-xs ml-2">● in stock</span>
+                )}
+              </span>
               <span className="text-gray-400">
                 {p.first_seen_date.slice(0, 10)} → {p.last_seen_date.slice(0, 10)}
               </span>
