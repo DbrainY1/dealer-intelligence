@@ -1,5 +1,8 @@
 "use client";
 import { useState, useMemo } from "react";
+import type { Dealer } from "@/types";
+import VinHistoryModal from "@/components/VinHistoryModal";
+import { VIN_GOLD, shortVin } from "@/lib/vin";
 
 interface VehicleEvent {
   vehicle_id: number;
@@ -30,14 +33,17 @@ export default function VehicleEventList({
   priceColor = "text-green-400",
   emptyMessage = "No records yet",
   showMileage = true,
+  dealers,
 }: {
   events: VehicleEvent[];
   priceColor?: string;
   emptyMessage?: string;
   showMileage?: boolean;
+  dealers?: Dealer[];
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [modalVehicleId, setModalVehicleId] = useState<number | null>(null);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -65,6 +71,7 @@ export default function VehicleEventList({
   const visibleCols = showMileage ? COL_HEADERS : COL_HEADERS.filter(c => c.key !== "mileage");
 
   return (
+    <>
     <div className="overflow-x-auto max-h-96 overflow-y-auto">
       <table className="w-full text-sm text-left min-w-[500px]">
         <thead className="sticky top-0 bg-gray-900 z-10">
@@ -101,13 +108,38 @@ export default function VehicleEventList({
               <td className={`py-2 pr-3 text-right whitespace-nowrap ${priceColor}`}>
                 {e.price ? `$${Math.round(e.price).toLocaleString()}` : "—"}
               </td>
-              <td className="py-2 text-right font-mono text-gray-600 whitespace-nowrap" style={{fontSize: "0.65rem"}}>
-                {e.vin ?? "—"}
+              <td className="py-2 text-right font-mono whitespace-nowrap" style={{fontSize: "0.65rem"}}>
+                {e.vin ? (
+                  dealers ? (
+                    <button
+                      type="button"
+                      title={e.vin}
+                      onClick={() => setModalVehicleId(e.vehicle_id)}
+                      style={{ color: VIN_GOLD }}
+                      className="font-mono hover:underline cursor-pointer"
+                    >
+                      {shortVin(e.vin)}
+                    </button>
+                  ) : (
+                    <span title={e.vin} style={{ color: VIN_GOLD }}>{shortVin(e.vin)}</span>
+                  )
+                ) : (
+                  "—"
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    {/* Reuse the existing orange VIN modal, unmodified, via its {vehicleId, dealers, onClose} contract. */}
+    {modalVehicleId != null && dealers && (
+      <VinHistoryModal
+        vehicleId={modalVehicleId}
+        dealers={dealers}
+        onClose={() => setModalVehicleId(null)}
+      />
+    )}
+    </>
   );
 }

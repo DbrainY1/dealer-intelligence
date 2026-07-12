@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import MarketPulseCards, { ScorecardRow } from "./MarketPulseCards";
 import CompetitorCharts from "./CompetitorCharts";
 import VinHistoryModal from "@/components/VinHistoryModal";
+import { VIN_GOLD } from "@/lib/vin";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
 interface VehicleInfo {
@@ -83,7 +84,8 @@ export default function CompetitorsPageClient({
                       {dealers.find((d) => d.id === e.to_dealer_id)?.name ?? `Dealer ${e.to_dealer_id}`}
                     </td>
                     <td
-                      className="px-4 py-3 font-mono text-amber-400 cursor-pointer hover:underline"
+                      className="px-4 py-3 font-mono cursor-pointer hover:underline"
+                      style={{ color: VIN_GOLD }}
                       onClick={() => setSelectedVehicleId(e.vehicle_id)}
                     >
                       {vehicleMap[e.vehicle_id]?.vin || "—"}
@@ -233,7 +235,7 @@ export default function CompetitorsPageClient({
                       <td className="px-4 py-3 text-orange-400">
                         {veh?.mileage ? veh.mileage.toLocaleString() : "—"}
                       </td>
-                      <td className="px-4 py-3 font-mono text-orange-400 text-xs">{veh?.vin || "—"}</td>
+                      <td className="px-4 py-3 font-mono text-xs" style={{ color: VIN_GOLD }}>{veh?.vin || "—"}</td>
                       <td className="px-4 py-3 font-semibold text-orange-500">
                         {e.price_at_listing != null ? "$" + e.price_at_listing.toLocaleString() : e.last_seen_price != null ? "$" + e.last_seen_price.toLocaleString() : "—"}
                       </td>
