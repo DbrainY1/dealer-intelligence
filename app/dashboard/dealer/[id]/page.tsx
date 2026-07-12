@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabase } from "@/lib/supabase-server";
 import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
 import VehicleEventList from "@/components/VehicleEventList";
@@ -43,10 +43,14 @@ function SummaryRow({ label, units, pace, avg, total }: { label: string; units: 
 
 export default async function DealerPage({ params }: PageProps) {
   const { id: dealerId } = await params;
-  const db = createClient(
-    "https://jrgavepbhlrltfadeuke.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyZ2F2ZXBiaGxybHRmYWRldWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5Njg5NDgsImV4cCI6MjA5MDU0NDk0OH0.It2KkRiTmtZJfPKSEBAvLmsA8aM3WgWhtGUd2smS2nk"
-  );
+  // Use the session-aware server client (authenticated role via cookies), the
+  // same client every other dashboard page uses. The dealer detail page had
+  // regressed to a raw, sessionless anon client (commit 5a8b545), so RLS
+  // (dealers_select_authenticated + authenticated-scoped policies on
+  // inventory_snapshots/vehicles) returned zero rows — producing the generic
+  // "Dealer" header, 0 inventory, and empty tables. /dashboard is auth-gated by
+  // middleware, so a valid session is always present here.
+  const db = await createServerSupabase();
 
   const { data: dealer } = await db
     .from("dealers")
