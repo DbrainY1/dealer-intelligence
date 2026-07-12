@@ -58,6 +58,12 @@ export default async function DealerPage({ params }: PageProps) {
     .eq("id", dealerId)
     .single<Dealer>();
 
+  // Full dealer roster (id/name) so the reused VIN detail modal can resolve
+  // from/to dealer names in a vehicle's event timeline.
+  const { data: dealerRoster } = await db
+    .from("dealers")
+    .select("id, name, dealer_group_id");
+
   // ── MTD / YTD dates ──────────────────────────────────────────────
   const now = new Date();
   const dayOfMonth = now.getDate();
@@ -269,7 +275,7 @@ export default async function DealerPage({ params }: PageProps) {
       {/* Full Inventory Table */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-white font-semibold mb-4">Current Inventory</h2>
-        <InventoryTable rows={rows} />
+        <InventoryTable rows={rows} dealers={(dealerRoster ?? []) as Dealer[]} />
       </div>
     </div>
   );

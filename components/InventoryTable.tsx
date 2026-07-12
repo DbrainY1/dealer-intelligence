@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import type { InventorySnapshot, Vehicle } from "@/types";
+import type { InventorySnapshot, Vehicle, Dealer } from "@/types";
+import VinHistoryModal from "@/components/VinHistoryModal";
 
 interface Row {
   snapshot: InventorySnapshot;
@@ -10,15 +10,25 @@ interface Row {
 
 interface InventoryTableProps {
   rows: Row[];
+  dealers: Dealer[];
 }
 
-type SortKey = "stock" | "year" | "make" | "model" | "mileage" | "list_price" | "status";
+type SortKey = "vin" | "year" | "make" | "model" | "mileage" | "list_price" | "status";
 
-export default function InventoryTable({ rows }: InventoryTableProps) {
-  const router = useRouter();
+// VIN is the customer-facing vehicle identifier. Stock # was removed because it
+// is dealer/internal, inconsistent across scrapers, and sometimes carries bad
+// values (e.g. drivetrain strings like FWD/2WD, or a VIN). Tables show the VIN
+// truncated to the last 8 characters with a leading ellipsis; the full VIN is
+// available in the title tooltip and the VIN detail modal.
+function shortVin(vin: string) {
+  return `…${vin.slice(-8)}`;
+}
+
+export default function InventoryTable({ rows, dealers }: InventoryTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("make");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filter, setFilter] = useState("");
+  const [modalVehicleId, setModalVehicleId] = useState<number | null>(null);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -33,7 +43,6 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
     const q = filter.toLowerCase();
     return (
       (r.vehicle?.vin ?? "").toLowerCase().includes(q) ||
-      (r.snapshot.stock_number ?? "").toLowerCase().includes(q) ||
       (r.vehicle?.make ?? "").toLowerCase().includes(q) ||
       (r.vehicle?.model ?? "").toLowerCase().includes(q)
     );
@@ -42,7 +51,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
   const sorted = [...filtered].sort((a, b) => {
     let aVal: string | number | null = null;
     let bVal: string | number | null = null;
-    if (sortKey === "stock") { aVal = a.snapshot.stock_number ?? ""; bVal = b.snapshot.stock_number ?? ""; }
+    if (sortKey === "vin") { aVal = a.vehicle?.vin ?? ""; bVal = b.vehicle?.vin ?? ""; }
     else if (sortKey === "year") { aVal = a.vehicle?.year ?? 0; bVal = b.vehicle?.year ?? 0; }
     else if (sortKey === "make") { aVal = a.vehicle?.make ?? ""; bVal = b.vehicle?.make ?? ""; }
     else if (sortKey === "model") { aVal = a.vehicle?.model ?? ""; bVal = b.vehicle?.model ?? ""; }
@@ -57,7 +66,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
   });
 
   const headers: { key: SortKey; label: string }[] = [
-    { key: "stock", label: "Stock #" },
+    { key: "vin", label: "VIN" },
     { key: "year", label: "Year" },
     { key: "make", label: "Make" },
     { key: "model", label: "Model" },
@@ -70,7 +79,7 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
     <div>
       <input
         type="text"
-        placeholder="Filter by VIN, stock #, make, model..."
+        placeholder="Filter by VIN, make, model..."
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="mb-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm w-full max-w-sm"
@@ -94,10 +103,22 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
             {sorted.map((r) => (
               <tr
                 key={r.snapshot.id}
-                className="border-b border-gray-800 hover:bg-gray-800 cursor-pointer"
-                onClick={() => r.vehicle?.vin && router.push(`/dashboard/vin/${r.vehicle.vin}`)}
+                className="border-b border-gray-800 hover:bg-gray-800"
               >
-                <td className="px-4 py-3 font-mono text-blue-400">{r.snapshot.stock_number ?? "—"}</td>
+                <td className="px-4 py-3 font-mono">
+                  {r.vehicle?.vin ? (
+                    <button
+                      type="button"
+                      title={r.vehicle.vin}
+                      onClick={() => r.vehicle?.id != null && setModalVehicleId(r.vehicle.id)}
+                      className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+                    >
+                      {shortVin(r.vehicle.vin)}
+                    </button>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="px-4 py-3">{r.vehicle?.year ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.make ?? "—"}</td>
                 <td className="px-4 py-3">{r.vehicle?.model ?? "—"}</td>
@@ -136,6 +157,15 @@ export default function InventoryTable({ rows }: InventoryTableProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Reuse the existing orange Market Pulse VIN detail modal (unmodified). */}
+      {modalVehicleId != null && (
+        <VinHistoryModal
+          vehicleId={modalVehicleId}
+          dealers={dealers}
+          onClose={() => setModalVehicleId(null)}
+        />
+      )}
     </div>
   );
 }
