@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { InventorySnapshot, Vehicle, Dealer } from "@/types";
 import VinHistoryModal from "@/components/VinHistoryModal";
+import { VIN_GOLD, shortVin } from "@/lib/vin";
 
 interface Row {
   snapshot: InventorySnapshot;
@@ -18,12 +19,8 @@ type SortKey = "vin" | "year" | "make" | "model" | "mileage" | "list_price" | "s
 // VIN is the customer-facing vehicle identifier. Stock # was removed because it
 // is dealer/internal, inconsistent across scrapers, and sometimes carries bad
 // values (e.g. drivetrain strings like FWD/2WD, or a VIN). Tables show the VIN
-// truncated to the last 8 characters with a leading ellipsis; the full VIN is
-// available in the title tooltip and the VIN detail modal.
-function shortVin(vin: string) {
-  return `…${vin.slice(-8)}`;
-}
-
+// truncated (shortVin) in DealerIQ VIN Gold; the full VIN is available in the
+// title tooltip and the VIN detail modal.
 export default function InventoryTable({ rows, dealers }: InventoryTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("make");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -111,7 +108,8 @@ export default function InventoryTable({ rows, dealers }: InventoryTableProps) {
                       type="button"
                       title={r.vehicle.vin}
                       onClick={() => r.vehicle?.id != null && setModalVehicleId(r.vehicle.id)}
-                      className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+                      style={{ color: VIN_GOLD }}
+                      className="hover:underline cursor-pointer"
                     >
                       {shortVin(r.vehicle.vin)}
                     </button>

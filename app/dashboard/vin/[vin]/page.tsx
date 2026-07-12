@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { VIN_GOLD } from "@/lib/vin";
 import type { Vehicle, InventoryEvent, Dealer } from "@/types";
 
 interface PageProps {
@@ -94,7 +95,7 @@ export default async function VinDetailPage({ params }: PageProps) {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <p className="text-gray-400 text-sm font-mono">{vin}</p>
+        <p className="text-sm font-mono" style={{ color: VIN_GOLD }}>{vin}</p>
         <h1 className="text-white text-xl font-bold">
           {vehicle ? `${vehicle.year ?? ""} ${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trim() : "VIN Detail"}
         </h1>

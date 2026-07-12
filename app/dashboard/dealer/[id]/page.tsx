@@ -253,6 +253,7 @@ export default async function DealerPage({ params }: PageProps) {
             priceColor="text-green-400"
             emptyMessage="No sales recorded yet"
             showMileage={true}
+            dealers={(dealerRoster ?? []) as Dealer[]}
           />
         </div>
 
@@ -268,6 +269,7 @@ export default async function DealerPage({ params }: PageProps) {
             priceColor="text-blue-400"
             emptyMessage="No additions recorded yet"
             showMileage={true}
+            dealers={(dealerRoster ?? []) as Dealer[]}
           />
         </div>
       </div>
