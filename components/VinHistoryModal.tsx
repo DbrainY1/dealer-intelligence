@@ -2,11 +2,24 @@
 
 import { useEffect, useState } from "react";
 import type { InventoryEvent, Dealer } from "@/types";
+import {
+  buildTimeline,
+  computeDaysOnMarket,
+  computeLifecycle,
+  effectiveDealerId,
+  todayInMarketTz,
+  type DisplayTone,
+  type EffectiveStatus,
+} from "@/lib/vin-history";
 
 interface VinHistoryModalProps {
   vehicleId: number;
   dealers: Dealer[];
   onClose: () => void;
+  /** Caller context: the surface that opened the modal shows this vehicle in
+   *  today's current inventory. Used only as a fallback when event history
+   *  alone cannot answer the status question. */
+  inCurrentInventory?: boolean;
 }
 
 interface VehicleData {
@@ -17,7 +30,36 @@ interface VehicleData {
   vin: string | null;
 }
 
-export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHistoryModalProps) {
+const TONE_STYLES: Record<DisplayTone, { text: string; bg: string }> = {
+  positive: { text: "text-green-400", bg: "bg-green-900/20" },
+  danger: { text: "text-red-400", bg: "bg-red-900/20" },
+  warning: { text: "text-amber-400", bg: "bg-amber-900/20" },
+  info: { text: "text-blue-400", bg: "bg-blue-900/20" },
+  muted: { text: "text-gray-500", bg: "bg-gray-800/40" },
+  neutral: { text: "text-blue-400", bg: "bg-blue-900/20" },
+};
+
+function statusPill(status: EffectiveStatus): { label: string; className: string } {
+  switch (status.kind) {
+    case "sold":
+      return { label: "Sold", className: "text-red-400" };
+    case "transferred":
+      return { label: "Transferred", className: "text-blue-400" };
+    case "pending_departure":
+      return { label: "Pending Departure", className: "text-amber-400" };
+    case "active":
+      return { label: "Active", className: "text-orange-400" };
+    default:
+      return { label: "Unconfirmed", className: "text-gray-400" };
+  }
+}
+
+export default function VinHistoryModal({
+  vehicleId,
+  dealers,
+  onClose,
+  inCurrentInventory,
+}: VinHistoryModalProps) {
   const [events, setEvents] = useState<InventoryEvent[]>([]);
   const [vehicle, setVehicle] = useState<VehicleData>({
     year: null,
@@ -48,13 +90,21 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
   if (loading) return <div className="p-4 text-gray-400">Loading...</div>;
   if (events.length === 0) return <div className="p-4 text-gray-400">No history found</div>;
 
-  // Sort by date ascending (oldest first)
-  const sorted = [...events].sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+  // Canonical-aware lifecycle state (legacy sold/removed never decide status).
+  const lifecycleOpts = { inCurrentInventory };
+  const { status } = computeLifecycle(events, lifecycleOpts);
+  const pill = statusPill(status);
 
-  // Calculate days on market
-  const firstDate = new Date(sorted[0]?.event_date || new Date());
-  const lastDate = new Date(sorted[sorted.length - 1]?.event_date || new Date());
-  const daysOnMarket = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+  // Days on Market = current stint → today (active/pending) or → canonical
+  // departure date (sold/transferred), on the market calendar (Pacific).
+  const daysOnMarket = computeDaysOnMarket(events, todayInMarketTz(), lifecycleOpts);
+
+  // Display timeline: duplicate-ADDED churn collapsed, resolved outcomes carry
+  // their linked pending detection nested. All raw rows stay in the payload.
+  const timeline = buildTimeline(events);
+
+  const dealerName = (id: number | null | undefined) =>
+    dealers.find((d) => d.id === id)?.name ?? null;
 
   return (
     <div
@@ -93,7 +143,9 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <p className="text-orange-200">Days on Market</p>
-              <p className="text-orange-400 font-bold text-lg">{daysOnMarket}d</p>
+              <p className="text-orange-400 font-bold text-lg">
+                {daysOnMarket != null ? `${daysOnMarket}d` : "—"}
+              </p>
             </div>
             <div>
               <p className="text-orange-200">Total Events</p>
@@ -101,78 +153,67 @@ export default function VinHistoryModal({ vehicleId, dealers, onClose }: VinHist
             </div>
             <div>
               <p className="text-orange-200">Status</p>
-              <p className={`font-bold text-lg ${
-                events.some(e => e.event_type === "removed") ? "text-orange-600" : "text-orange-400"
-              }`}>
-                {events.some(e => e.event_type === "removed") ? "Sold" : "Active"}
-              </p>
+              <p className={`font-bold text-lg ${pill.className}`}>{pill.label}</p>
             </div>
           </div>
         </div>
 
         {/* Timeline */}
         <div className="p-4 space-y-3">
-          {sorted.map((event, idx) => {
-            const fromDealer = dealers.find(d => d.id === event.from_dealer_id);
-            const toDealer = dealers.find(d => d.id === event.to_dealer_id);
+          {timeline.map((item, idx) => {
+            const event = item.event;
+            const { label, tone, icon, demoted, struck } = item.display;
+            const toneStyle = TONE_STYLES[tone];
 
-            const isRemoved = event.event_type === "removed" || event.event_type === "sold";
-            const isAdded = event.event_type === "added";
-            const isTransfer = event.event_type === "transferred";
-
+            const fromName = dealerName(event.from_dealer_id);
+            const toName = dealerName(event.to_dealer_id);
             let dealerLabel = "Dealer unknown";
-            if (isTransfer && fromDealer && toDealer) {
-              dealerLabel = `${fromDealer.name} → ${toDealer.name}`;
-            } else if (isAdded && toDealer) {
-              dealerLabel = toDealer.name;
-            } else if (isRemoved && fromDealer) {
-              dealerLabel = fromDealer.name;
-            } else if (toDealer) {
-              dealerLabel = toDealer.name;
-            } else if (fromDealer) {
-              dealerLabel = fromDealer.name;
-            }
-
-            let icon = "📍";
-            let color = "text-blue-400";
-            let bgColor = "bg-blue-900/20";
-            if (isRemoved) {
-              icon = "✓";
-              color = "text-red-400";
-              bgColor = "bg-red-900/20";
-            } else if (isAdded) {
-              icon = "+";
-              color = "text-green-400";
-              bgColor = "bg-green-900/20";
-            } else if (event.event_type === "price_changed") {
-              icon = "$";
-              color = "text-amber-400";
-              bgColor = "bg-amber-900/20";
+            if (event.event_type === "transferred" && fromName && toName) {
+              dealerLabel = `${fromName} → ${toName}`;
+            } else {
+              dealerLabel = dealerName(effectiveDealerId(event)) ?? "Dealer unknown";
             }
 
             return (
-              <div key={event.id} className="flex gap-3">
+              <div key={event.id} className={`flex gap-3 ${demoted ? "opacity-60" : ""}`}>
                 {/* Timeline dot */}
                 <div className="flex flex-col items-center">
-                  <div className={`w-8 h-8 rounded-full ${bgColor} flex items-center justify-center ${color} font-bold text-xs`}>
+                  <div
+                    className={`w-8 h-8 rounded-full ${toneStyle.bg} flex items-center justify-center ${toneStyle.text} font-bold text-xs`}
+                  >
                     {icon}
                   </div>
-                  {idx < sorted.length - 1 && <div className="w-0.5 h-8 bg-gray-700 my-1" />}
+                  {idx < timeline.length - 1 && <div className="w-0.5 h-8 bg-gray-700 my-1" />}
                 </div>
 
                 {/* Event details */}
                 <div className="flex-1 pb-2">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-white font-semibold">
-                        {isRemoved && "Removed (Sold)"}
-                        {isAdded && "Added to Inventory"}
-                        {event.event_type === "price_changed" && "Price Changed"}
-                        {isTransfer && ` (Transferred)`}
+                      <p
+                        className={`font-semibold ${demoted ? "text-gray-400" : "text-white"} ${
+                          struck ? "line-through" : ""
+                        }`}
+                      >
+                        {label}
                       </p>
-                      <p className="text-gray-400 text-sm">
-                        {dealerLabel}
-                      </p>
+                      <p className="text-gray-400 text-sm">{dealerLabel}</p>
+                      {item.seenAgain.length > 0 && (
+                        <p
+                          className="text-gray-500 text-xs mt-0.5"
+                          title={item.seenAgain
+                            .map((s) => s.event_date.slice(0, 10))
+                            .join(", ")}
+                        >
+                          Seen again ×{item.seenAgain.length}
+                        </p>
+                      )}
+                      {item.nestedDetection && (
+                        <p className="text-gray-500 text-xs mt-0.5">
+                          From pending departure detected{" "}
+                          {item.nestedDetection.event_date.slice(0, 10)}
+                        </p>
+                      )}
                     </div>
                     <p className="text-gray-500 text-sm">{event.event_date.slice(0, 10)}</p>
                   </div>
