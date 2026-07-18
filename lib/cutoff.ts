@@ -89,11 +89,13 @@ export function elapsedDaysInclusive(
 
 /** Minimal shape of an inventory_events sold row for canonical filtering. */
 export interface SoldEventLike {
+  id?: number | null;
   event_type?: string | null;
   event_status?: string | null;
   source_pending_event_id?: number | null;
   excluded_from_metrics?: boolean | null;
   event_date: string;
+  created_at?: string | null;
 }
 
 /**
@@ -120,10 +122,38 @@ export function isCanonicalSoldEvent(e: SoldEventLike, cutoff: string): boolean 
   );
 }
 
-/** Filter a raw sold-event list to the canonical population (see
- *  isCanonicalSoldEvent). Returns a new array; never mutates the input. */
+/** True if `a` is the preferred representative over `b` for the same
+ *  source_pending_event_id: newest created_at wins; ties break on the higher id
+ *  (deterministic). */
+function preferredRepresentative(a: SoldEventLike, b: SoldEventLike): boolean {
+  const ca = a.created_at ?? "";
+  const cb = b.created_at ?? "";
+  if (ca !== cb) return ca > cb;
+  return (a.id ?? 0) > (b.id ?? 0);
+}
+
+/**
+ * Filter a raw sold-event list to the canonical population (see
+ * isCanonicalSoldEvent) AND deduplicate by source_pending_event_id, keeping one
+ * deterministic representative row per pending id (newest created_at, then
+ * highest id). This gives cardinality parity with the projection's
+ * COUNT(DISTINCT source_pending_event_id): dealer-detail count / pace / revenue
+ * / average / list all derive from this set, so a duplicate direct outcome
+ * sharing one pending id can never inflate them.
+ *
+ * Deliberately NOT deduplicated by VIN, vehicle_id, event id, or event_date —
+ * one VIN may legitimately have multiple stints and multiple later sales, each
+ * with its own pending detection. Returns a new array; never mutates the input.
+ */
 export function canonicalSoldEvents<T extends SoldEventLike>(events: T[], cutoff: string): T[] {
-  return events.filter((e) => isCanonicalSoldEvent(e, cutoff));
+  const byPending = new Map<number, T>();
+  for (const e of events) {
+    if (!isCanonicalSoldEvent(e, cutoff)) continue;
+    const key = e.source_pending_event_id as number; // non-null per the predicate
+    const existing = byPending.get(key);
+    if (!existing || preferredRepresentative(e, existing)) byPending.set(key, e);
+  }
+  return [...byPending.values()];
 }
 
 /**

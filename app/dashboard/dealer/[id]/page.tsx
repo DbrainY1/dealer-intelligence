@@ -101,7 +101,7 @@ export default async function DealerPage({ params }: PageProps) {
   const mtdLowerBound = mtdCutoff ?? monthStart;
   const { data: soldMTDRaw } = await db
     .from("inventory_events")
-    .select("vehicle_id, event_date, last_seen_price, event_type, event_status, source_pending_event_id, excluded_from_metrics")
+    .select("id, vehicle_id, event_date, last_seen_price, event_type, event_status, source_pending_event_id, excluded_from_metrics, created_at")
     .eq("from_dealer_id", dealerId)
     .eq("event_type", "sold")
     .gte("event_date", mtdLowerBound)

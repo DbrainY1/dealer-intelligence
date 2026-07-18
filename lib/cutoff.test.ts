@@ -112,13 +112,19 @@ test("cutoff Days of Supply uses inclusive elapsed days", () => {
 const CUTOFF = "2026-07-11";
 
 // A canonical resolved sold event (linked, not excluded, on/after cutoff).
+// Each call gets a unique default source_pending_event_id + id so, absent an
+// explicit override, events count as separate units.
+let _pid = 0;
 function canon(overrides: Partial<SoldEventLike> & { last_seen_price?: number } = {}) {
+  _pid += 1;
   return {
+    id: _pid,
     event_type: "sold",
     event_status: "resolved",
-    source_pending_event_id: 1000 + Math.floor((overrides.event_date ?? "z").length),
+    source_pending_event_id: _pid,
     excluded_from_metrics: false,
     event_date: "2026-07-12",
+    created_at: "2026-07-12T00:00:00Z",
     last_seen_price: 20000,
     ...overrides,
   } as SoldEventLike & { last_seen_price: number };
@@ -215,6 +221,81 @@ test("9. dealer-detail canonical count equals monthly_sales.units_sold", () => {
   for (const { unitsSold, fixture } of cases) {
     assert.equal(canonicalSoldEvents(fixture, CUTOFF).length, unitsSold);
   }
+});
+
+// ── Distinct pending-event parity (PR #8 final amendment) ───────────────────
+test("dedup: two canonical rows sharing a source_pending_event_id count as one", () => {
+  const events = [
+    canon({ id: 1, source_pending_event_id: 500, last_seen_price: 20000, created_at: "2026-07-12T00:00:00Z" }),
+    canon({ id: 2, source_pending_event_id: 500, last_seen_price: 20000, created_at: "2026-07-12T05:00:00Z" }),
+  ];
+  const pop = canonicalSoldEvents(events, CUTOFF);
+  assert.equal(pop.length, 1);                       // one sold unit
+});
+
+test("dedup: revenue is not double-counted and average is not distorted", () => {
+  const events = [
+    canon({ id: 1, source_pending_event_id: 500, last_seen_price: 20000, created_at: "2026-07-12T00:00:00Z" }),
+    canon({ id: 2, source_pending_event_id: 500, last_seen_price: 20000, created_at: "2026-07-12T05:00:00Z" }),
+    canon({ id: 3, source_pending_event_id: 501, last_seen_price: 30000, created_at: "2026-07-12T00:00:00Z" }),
+  ];
+  const pop = canonicalSoldEvents(events, CUTOFF);
+  const count = pop.length;
+  const revenue = pop.reduce((s, e) => s + ((e as { last_seen_price?: number }).last_seen_price ?? 0), 0);
+  assert.equal(count, 2);                            // two distinct pending ids
+  assert.equal(revenue, 50000);                      // 20000 counted once + 30000, not 70000
+  assert.equal(revenue / count, 25000);              // average undistorted
+});
+
+test("dedup: the Vehicles Sold list shows one item per pending id", () => {
+  const events = [
+    canon({ id: 1, source_pending_event_id: 500, created_at: "2026-07-12T00:00:00Z" }),
+    canon({ id: 2, source_pending_event_id: 500, created_at: "2026-07-12T05:00:00Z" }),
+  ];
+  assert.equal(canonicalSoldEvents(events, CUTOFF).length, 1);
+});
+
+test("dedup: different source_pending_event_id values still count separately", () => {
+  const events = [
+    canon({ id: 1, source_pending_event_id: 500 }),
+    canon({ id: 2, source_pending_event_id: 501 }),
+    canon({ id: 3, source_pending_event_id: 502 }),
+  ];
+  assert.equal(canonicalSoldEvents(events, CUTOFF).length, 3);
+});
+
+test("dedup: representative is the newest created_at, tie broken by highest id", () => {
+  const events = [
+    canon({ id: 10, source_pending_event_id: 500, last_seen_price: 100, created_at: "2026-07-12T00:00:00Z" }),
+    canon({ id: 11, source_pending_event_id: 500, last_seen_price: 200, created_at: "2026-07-14T00:00:00Z" }), // newest
+    canon({ id: 12, source_pending_event_id: 500, last_seen_price: 300, created_at: "2026-07-13T00:00:00Z" }),
+  ];
+  const pop = canonicalSoldEvents(events, CUTOFF);
+  assert.equal(pop.length, 1);
+  assert.equal((pop[0] as { last_seen_price?: number }).last_seen_price, 200); // newest created_at wins
+  // created_at tie → higher id wins
+  const tie = [
+    canon({ id: 20, source_pending_event_id: 501, last_seen_price: 1, created_at: "2026-07-12T00:00:00Z" }),
+    canon({ id: 21, source_pending_event_id: 501, last_seen_price: 2, created_at: "2026-07-12T00:00:00Z" }),
+  ];
+  assert.equal((canonicalSoldEvents(tie, CUTOFF)[0] as { last_seen_price?: number }).last_seen_price, 2);
+});
+
+test("dedup: NOT deduplicated by VIN/vehicle_id/event_date — two stints of one VIN count twice", () => {
+  // Same vehicle, two distinct pending detections (two sales) → two units.
+  const events = [
+    { ...canon({ id: 1, source_pending_event_id: 500, event_date: "2026-07-12" }), vehicle_id: 999 },
+    { ...canon({ id: 2, source_pending_event_id: 600, event_date: "2026-07-12" }), vehicle_id: 999 },
+  ] as SoldEventLike[];
+  assert.equal(canonicalSoldEvents(events, CUTOFF).length, 2);
+});
+
+test("dedup: Queen/Emporio/Globul unchanged (no duplicate pending ids)", () => {
+  // Production has a unique index on source_pending_event_id, so counts are
+  // unchanged by dedup — the reconciliation still holds.
+  assert.equal(canonicalSoldEvents(dealerFixture(8, 0), CUTOFF).length, 8);   // Globul
+  assert.equal(canonicalSoldEvents(dealerFixture(11, 1), CUTOFF).length, 11); // Queen
+  assert.equal(canonicalSoldEvents(dealerFixture(2, 1), CUTOFF).length, 2);   // Emporio
 });
 
 test("10. no canonical cutoff preserves legacy MTD behavior and wording", () => {
