@@ -25,7 +25,7 @@ export default function InventoryTable({ rows, dealers }: InventoryTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("make");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filter, setFilter] = useState("");
-  const [modalVehicleId, setModalVehicleId] = useState<number | null>(null);
+  const [modalVehicle, setModalVehicle] = useState<{ id: number; active: boolean } | null>(null);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -107,7 +107,10 @@ export default function InventoryTable({ rows, dealers }: InventoryTableProps) {
                     <button
                       type="button"
                       title={r.vehicle.vin}
-                      onClick={() => r.vehicle?.id != null && setModalVehicleId(r.vehicle.id)}
+                      onClick={() =>
+                        r.vehicle?.id != null &&
+                        setModalVehicle({ id: r.vehicle.id, active: r.snapshot.status === "active" })
+                      }
                       style={{ color: VIN_GOLD }}
                       className="hover:underline cursor-pointer"
                     >
@@ -156,12 +159,15 @@ export default function InventoryTable({ rows, dealers }: InventoryTableProps) {
         </table>
       </div>
 
-      {/* Reuse the existing orange Market Pulse VIN detail modal (unmodified). */}
-      {modalVehicleId != null && (
+      {/* Reuse the existing orange Market Pulse VIN detail modal. This table
+          lists today's snapshot rows, so it can vouch for current-inventory
+          presence (fallback context only — canonical events still win). */}
+      {modalVehicle != null && (
         <VinHistoryModal
-          vehicleId={modalVehicleId}
+          vehicleId={modalVehicle.id}
           dealers={dealers}
-          onClose={() => setModalVehicleId(null)}
+          inCurrentInventory={modalVehicle.active}
+          onClose={() => setModalVehicle(null)}
         />
       )}
     </div>
