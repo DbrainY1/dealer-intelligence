@@ -87,6 +87,45 @@ export function elapsedDaysInclusive(
   return days >= 1 ? days : 1;
 }
 
+/** Minimal shape of an inventory_events sold row for canonical filtering. */
+export interface SoldEventLike {
+  event_type?: string | null;
+  event_status?: string | null;
+  source_pending_event_id?: number | null;
+  excluded_from_metrics?: boolean | null;
+  event_date: string;
+}
+
+/**
+ * The monthly_sales projection's exact canonical sold-event predicate:
+ *   event_type = 'sold'
+ *   event_status = 'resolved'
+ *   source_pending_event_id IS NOT NULL
+ *   excluded_from_metrics IS NOT TRUE          (NULL or FALSE both pass)
+ *   event_date >= projection_cutoff            (partial-month lower bound)
+ *
+ * Deliberately does NOT filter on confidence or reason_code — those describe
+ * today's resolver pathway, not the projection's population contract, and a
+ * future legitimate sold pathway may use different values. Any metric labeled
+ * from the canonical cutoff (count, pace, revenue, average price) must derive
+ * from this one population so the values cannot drift apart.
+ */
+export function isCanonicalSoldEvent(e: SoldEventLike, cutoff: string): boolean {
+  return (
+    (e.event_type == null || e.event_type === "sold") &&
+    e.event_status === "resolved" &&
+    e.source_pending_event_id != null &&
+    e.excluded_from_metrics !== true &&
+    e.event_date.slice(0, 10) >= cutoff
+  );
+}
+
+/** Filter a raw sold-event list to the canonical population (see
+ *  isCanonicalSoldEvent). Returns a new array; never mutates the input. */
+export function canonicalSoldEvents<T extends SoldEventLike>(events: T[], cutoff: string): T[] {
+  return events.filter((e) => isCanonicalSoldEvent(e, cutoff));
+}
+
 /**
  * Cutoff-aware pace: project the canonical partial-month units to a full month.
  *   pace = round(units / elapsedDaysInclusive * daysInMonth)

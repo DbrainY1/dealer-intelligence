@@ -5,7 +5,7 @@ import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
 import VehicleEventList from "@/components/VehicleEventList";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
-import { isCanonicalRow, cutoffLabel, cutoffPace } from "@/lib/cutoff";
+import { isCanonicalRow, cutoffLabel, cutoffPace, canonicalSoldEvents } from "@/lib/cutoff";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -76,16 +76,41 @@ export default async function DealerPage({ params }: PageProps) {
   const yearStart = `${now.getFullYear()}-01-01`;
   const today = now.toISOString().split("T")[0];
 
-  // ── Sold events (removal detector) ───────────────────────────────
-  const { data: soldMTD } = await db
+  // ── Canonical projection metadata for the current month ──────────────
+  // When the current month's monthly_sales row is canonical, the dealer-detail
+  // MTD metrics MUST derive from the same canonical sold-event population as the
+  // projection — the legacy inventory_events set still contains pre-cutoff /
+  // unlinked July rows for some dealers (e.g. Queen 12→11, Emporio 3→2), so a
+  // canonical label + denominator must never sit atop a legacy count.
+  const { data: msRow } = await db
+    .from("monthly_sales")
+    .select("computed_by, projection_cutoff")
+    .eq("dealer_id", dealerId)
+    .eq("month_start", monthStart)
+    .maybeSingle();
+  const mtdCutoff = isCanonicalRow(msRow?.computed_by) ? (msRow?.projection_cutoff ?? null) : null;
+  const mtdLabel = cutoffLabel(mtdCutoff) ?? "MTD";
+
+  // ── MTD sold population ──────────────────────────────────────────────
+  // Fetch sold events since the applicable lower bound (canonical cutoff when
+  // canonical, else the month start), then select the population once:
+  //   canonical → the projection's exact predicate (canonicalSoldEvents)
+  //   legacy    → prior behavior (excluded_from_metrics = false)
+  // Count, pace, average price, and revenue ALL read from this single array so
+  // they cannot drift apart.
+  const mtdLowerBound = mtdCutoff ?? monthStart;
+  const { data: soldMTDRaw } = await db
     .from("inventory_events")
-    .select("vehicle_id, event_date, last_seen_price")
+    .select("vehicle_id, event_date, last_seen_price, event_type, event_status, source_pending_event_id, excluded_from_metrics")
     .eq("from_dealer_id", dealerId)
     .eq("event_type", "sold")
-    .eq("excluded_from_metrics", false)
-    .gte("event_date", monthStart)
+    .gte("event_date", mtdLowerBound)
     .order("event_date", { ascending: false });
+  const soldMTD = mtdCutoff
+    ? canonicalSoldEvents(soldMTDRaw ?? [], mtdCutoff)
+    : (soldMTDRaw ?? []).filter((e) => e.excluded_from_metrics === false);
 
+  // YTD is unchanged (audit-only; still the legacy inventory_events set).
   const { data: soldYTD } = await db
     .from("inventory_events")
     .select("vehicle_id, event_date, last_seen_price")
@@ -95,26 +120,13 @@ export default async function DealerPage({ params }: PageProps) {
     .gte("event_date", yearStart)
     .order("event_date", { ascending: false });
 
-  const mtdUnits = soldMTD?.length ?? 0;
+  const mtdUnits = soldMTD.length;
   const ytdUnits = soldYTD?.length ?? 0;
 
-  const mtdRevenue = (soldMTD ?? []).reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
+  const mtdRevenue = soldMTD.reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
   const ytdRevenue = (soldYTD ?? []).reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
   const mtdAvg = mtdUnits > 0 ? mtdRevenue / mtdUnits : 0;
   const ytdAvg = ytdUnits > 0 ? ytdRevenue / ytdUnits : 0;
-
-  // Canonical projection metadata for the current month (cutoff-aware MTD label
-  // + pace). units/revenue keep their existing inventory_events source; only the
-  // MTD pace denominator and label become cutoff-aware when the month is a
-  // canonical partial-month projection.
-  const { data: msRow } = await db
-    .from("monthly_sales")
-    .select("computed_by, projection_cutoff")
-    .eq("dealer_id", dealerId)
-    .eq("month_start", monthStart)
-    .maybeSingle();
-  const mtdCutoff = isCanonicalRow(msRow?.computed_by) ? (msRow?.projection_cutoff ?? null) : null;
-  const mtdLabel = cutoffLabel(mtdCutoff) ?? "MTD";
 
   // Pace projections. MTD: cutoff-aware inclusive elapsed days when canonical,
   // else the existing day-of-month denominator. YTD is unchanged.

@@ -14,6 +14,9 @@ import {
   paceDenominator,
   soldCellValue,
   pacificToday,
+  isCanonicalSoldEvent,
+  canonicalSoldEvents,
+  type SoldEventLike,
 } from "./cutoff.ts";
 
 // 1. Non-NULL cutoff renders a label derived from the date value.
@@ -103,4 +106,128 @@ test("cutoff Days of Supply uses inclusive elapsed days", () => {
   assert.equal(cutoffDaysOfSupply(100, 8, "2026-07-11", "2026-07-18"), 100);
   // zero sold → null (infinite supply), same contract as the day-of-month formula
   assert.equal(cutoffDaysOfSupply(50, 0, "2026-07-11", "2026-07-18"), null);
+});
+
+// ── Dealer-detail canonical sold population (PR #8 amendment) ────────────────
+const CUTOFF = "2026-07-11";
+
+// A canonical resolved sold event (linked, not excluded, on/after cutoff).
+function canon(overrides: Partial<SoldEventLike> & { last_seen_price?: number } = {}) {
+  return {
+    event_type: "sold",
+    event_status: "resolved",
+    source_pending_event_id: 1000 + Math.floor((overrides.event_date ?? "z").length),
+    excluded_from_metrics: false,
+    event_date: "2026-07-12",
+    last_seen_price: 20000,
+    ...overrides,
+  } as SoldEventLike & { last_seen_price: number };
+}
+
+test("1. a legacy sold event before the cutoff is excluded", () => {
+  const events = [canon(), { event_type: "sold", event_status: null, source_pending_event_id: null, excluded_from_metrics: false, event_date: "2026-07-02", last_seen_price: 9999 }];
+  const out = canonicalSoldEvents(events, CUTOFF);
+  assert.equal(out.length, 1);
+  assert.equal(isCanonicalSoldEvent(events[1], CUTOFF), false);
+});
+
+test("2. a legacy/noncanonical event after the cutoff is excluded", () => {
+  // after cutoff but event_status NULL and unlinked → not canonical
+  const legacyAfter = { event_type: "sold", event_status: null, source_pending_event_id: null, excluded_from_metrics: false, event_date: "2026-07-15", last_seen_price: 9999 };
+  assert.equal(isCanonicalSoldEvent(legacyAfter, CUTOFF), false);
+  // resolved but missing source_pending_event_id → excluded
+  const unlinked = { ...canon(), source_pending_event_id: null };
+  assert.equal(isCanonicalSoldEvent(unlinked, CUTOFF), false);
+  // excluded_from_metrics = true → excluded
+  assert.equal(isCanonicalSoldEvent({ ...canon(), excluded_from_metrics: true }, CUTOFF), false);
+});
+
+test("3. a resolved+linked+not-excluded event counts even with a different confidence/reason_code", () => {
+  // confidence/reason_code are extra fields not in SoldEventLike; the predicate
+  // must include the row regardless of them.
+  const futurePathway = { ...canon(), confidence: "low", reason_code: "some_future_sold_pathway" } as SoldEventLike;
+  assert.equal(isCanonicalSoldEvent(futurePathway, CUTOFF), true);
+  assert.equal(canonicalSoldEvents([futurePathway], CUTOFF).length, 1);
+  // excluded_from_metrics NULL also passes (IS NOT TRUE)
+  assert.equal(isCanonicalSoldEvent({ ...canon(), excluded_from_metrics: null }, CUTOFF), true);
+});
+
+test("4. confidence and reason_code are not used as extra filters", () => {
+  const a = { ...canon(), confidence: "high", reason_code: "no_reappearance_sold" } as SoldEventLike;
+  const b = { ...canon(), confidence: "medium", reason_code: "something_else" } as SoldEventLike;
+  const c = { ...canon(), confidence: null, reason_code: null } as SoldEventLike;
+  assert.equal(canonicalSoldEvents([a, b, c], CUTOFF).length, 3);
+});
+
+// Fixtures mirroring production shapes: N canonical events + M legacy pre-cutoff.
+function dealerFixture(canonN: number, legacyPreCutoff: number) {
+  const out: SoldEventLike[] = [];
+  for (let i = 0; i < canonN; i++)
+    out.push(canon({ source_pending_event_id: 2000 + i, event_date: "2026-07-12", last_seen_price: 20000 }));
+  for (let i = 0; i < legacyPreCutoff; i++)
+    out.push({ event_type: "sold", event_status: null, source_pending_event_id: null, excluded_from_metrics: false, event_date: "2026-07-02", last_seen_price: 9999 });
+  return out;
+}
+
+test("5. Queen reconciles to 11 (not the legacy 12)", () => {
+  const events = dealerFixture(11, 1); // 11 canonical + 1 pre-cutoff legacy
+  assert.equal(events.length, 12);
+  assert.equal(canonicalSoldEvents(events, CUTOFF).length, 11);
+});
+
+test("6. Emporio reconciles to 2 (not the legacy 3)", () => {
+  const events = dealerFixture(2, 1); // 2 canonical + 1 pre-cutoff legacy
+  assert.equal(events.length, 3);
+  assert.equal(canonicalSoldEvents(events, CUTOFF).length, 2);
+});
+
+test("7. Globul remains 8 (all canonical, no legacy noise)", () => {
+  const events = dealerFixture(8, 0);
+  assert.equal(canonicalSoldEvents(events, CUTOFF).length, 8);
+});
+
+test("8. count, pace, average price and revenue use the same filtered population", () => {
+  // 2 canonical @ 20000 + 1 legacy pre-cutoff @ 9999. All four metrics must
+  // derive from the canonical set (the 9999 must not leak into revenue/avg).
+  const events = [
+    canon({ source_pending_event_id: 1, last_seen_price: 20000 }),
+    canon({ source_pending_event_id: 2, last_seen_price: 30000 }),
+    { event_type: "sold", event_status: null, source_pending_event_id: null, excluded_from_metrics: false, event_date: "2026-07-02", last_seen_price: 9999 },
+  ];
+  const pop = canonicalSoldEvents(events, CUTOFF);
+  const count = pop.length;
+  const revenue = pop.reduce((s, e) => s + ((e as { last_seen_price?: number }).last_seen_price ?? 0), 0);
+  const avg = count > 0 ? revenue / count : 0;
+  const pace = cutoffPace(count, CUTOFF, 31, "2026-07-18");
+  assert.equal(count, 2);
+  assert.equal(revenue, 50000);        // 9999 legacy excluded
+  assert.equal(avg, 25000);
+  assert.equal(pace, cutoffPace(2, CUTOFF, 31, "2026-07-18")); // pace uses the same count
+});
+
+test("9. dealer-detail canonical count equals monthly_sales.units_sold", () => {
+  // For each dealer, the canonical population size must equal units_sold.
+  const cases = [
+    { unitsSold: 8, fixture: dealerFixture(8, 0) },   // Globul
+    { unitsSold: 11, fixture: dealerFixture(11, 1) },  // Queen
+    { unitsSold: 2, fixture: dealerFixture(2, 1) },   // Emporio
+  ];
+  for (const { unitsSold, fixture } of cases) {
+    assert.equal(canonicalSoldEvents(fixture, CUTOFF).length, unitsSold);
+  }
+});
+
+test("10. no canonical cutoff preserves legacy MTD behavior and wording", () => {
+  // When the month is not canonical, the page uses mtdCutoff=null: the label
+  // stays "MTD" and the population is the legacy filter (excluded_from_metrics
+  // === false), not the canonical predicate.
+  assert.equal(cutoffLabel(null) ?? "MTD", "MTD");
+  const legacyEvents = [
+    { event_type: "sold", event_status: null, source_pending_event_id: null, excluded_from_metrics: false, event_date: "2026-07-02", last_seen_price: 9999 },
+    { event_type: "sold", event_status: null, source_pending_event_id: null, excluded_from_metrics: true, event_date: "2026-07-05", last_seen_price: 1 },
+  ] as (SoldEventLike & { excluded_from_metrics: boolean })[];
+  const legacyPop = legacyEvents.filter((e) => e.excluded_from_metrics === false);
+  assert.equal(legacyPop.length, 1); // legacy behavior unchanged (excluded=false only)
+  // and the day-of-month denominator is preserved when there is no cutoff
+  assert.equal(paceDenominator(null, 18, "2026-07-18"), 18);
 });
