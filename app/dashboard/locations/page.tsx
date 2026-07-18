@@ -4,6 +4,14 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
 import LocationsMap from "./LocationsMap";
 import type { DealerMapData } from "./LocationsMap";
+import { isCanonicalRow, cutoffLabel, cutoffDaysOfSupply } from "@/lib/cutoff";
+
+interface MonthlySalesRow {
+  dealer_id: number;
+  units_sold: number | null;
+  computed_by: string | null;
+  projection_cutoff: string | null;
+}
 
 export default async function LocationsPage() {
   const supabase = await createServerSupabase();
@@ -69,15 +77,21 @@ export default async function LocationsPage() {
   monthStart.setDate(1);
   const { data: monthlySales } = await supabase
     .from("monthly_sales")
-    .select("dealer_id, units_sold")
+    .select("dealer_id, units_sold, computed_by, projection_cutoff")
     .eq("month_start", monthStart.toISOString().split("T")[0])
     .in("dealer_id", dealerIds);
   const soldByDealer = new Map(
-    (monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [
+    (monthlySales ?? []).map((r: MonthlySalesRow) => [
       r.dealer_id,
       r.units_sold ?? 0,
     ])
   );
+  // Canonical partial-month cutoff (shared across rows this month; NULL for
+  // legacy). Derived from projection_cutoff — never hardcoded.
+  const canonicalCutoff =
+    (monthlySales ?? [])
+      .map((r: MonthlySalesRow) => (isCanonicalRow(r.computed_by) ? r.projection_cutoff : null))
+      .find((c): c is string => c != null) ?? null;
 
   // New listings last 7 days
   const sevenDaysAgo = new Date();
@@ -101,7 +115,11 @@ export default async function LocationsPage() {
     const ds = allSnapshots.filter((s) => s.dealer_id === d.id && s.status === "active");
     const inStock = ds.length;
     const mtdSold = soldByDealer.get(d.id) ?? 0;
-    const daysOfSupply = mtdSold > 0 ? Math.round((inStock * dayOfMonth) / mtdSold) : null;
+    // Days of Supply is time-normalized: cutoff-aware inclusive elapsed days when
+    // canonical, else the existing day-of-month denominator.
+    const daysOfSupply = canonicalCutoff
+      ? cutoffDaysOfSupply(inStock, mtdSold, canonicalCutoff)
+      : (mtdSold > 0 ? Math.round((inStock * dayOfMonth) / mtdSold) : null);
     const validPrices = ds
       .filter((s) => s.list_price != null && s.list_price > 500)
       .map((s) => s.list_price as number);
@@ -137,7 +155,14 @@ export default async function LocationsPage() {
             Track dealership positioning across the Las Vegas market.
           </p>
         </div>
-        <LocationsMap dealerData={dealerMapData} />
+        <LocationsMap
+          dealerData={dealerMapData}
+          velocityTitle={
+            canonicalCutoff
+              ? `Sales Velocity (${cutoffLabel(canonicalCutoff)})`
+              : undefined
+          }
+        />
       </div>
     </RoleGuard>
   );

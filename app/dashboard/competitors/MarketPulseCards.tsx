@@ -31,10 +31,12 @@ function SortableCard({
   row,
   isSelected,
   onToggle,
+  soldLabel = "MTD sold",
 }: {
   row: ScorecardRow;
   isSelected: boolean;
   onToggle: (id: number) => void;
+  soldLabel?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: row.id });
@@ -85,7 +87,7 @@ function SortableCard({
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-green-400">{row.sold == null ? "—" : row.sold}</p>
-            <p className="text-gray-500 text-xs">MTD sold</p>
+            <p className="text-gray-500 text-xs">{soldLabel}</p>
           </div>
         </div>
 
@@ -118,9 +120,11 @@ const STORAGE_KEY = "market-pulse-order";
 interface MarketPulseCardsProps {
   scorecards: ScorecardRow[];
   onSelectionChange?: (selectedIds: Set<number>) => void;
+  /** Cutoff-aware label for the sold stat, e.g. "Sold since Jul 11". */
+  soldLabel?: string;
 }
 
-export default function MarketPulseCards({ scorecards, onSelectionChange }: MarketPulseCardsProps) {
+export default function MarketPulseCards({ scorecards, onSelectionChange, soldLabel }: MarketPulseCardsProps) {
   const allIds = scorecards.map((s) => s.id);
   const [selected, setSelected] = useState<Set<number>>(new Set(allIds));
   const [order, setOrder] = useState<number[]>(allIds);
@@ -228,6 +232,7 @@ export default function MarketPulseCards({ scorecards, onSelectionChange }: Mark
                 row={row}
                 isSelected={selected.has(row.id)}
                 onToggle={toggle}
+                soldLabel={soldLabel}
               />
             ))}
           </div>

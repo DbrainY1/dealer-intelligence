@@ -5,6 +5,7 @@ import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
 import VehicleEventList from "@/components/VehicleEventList";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
+import { isCanonicalRow, cutoffLabel, cutoffPace } from "@/lib/cutoff";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -20,7 +21,7 @@ function fmtN(n: number) {
 function SummaryRow({ label, units, pace, avg, total }: { label: string; units: number; pace: number; avg: number; total: number }) {
   return (
     <div className="flex flex-wrap gap-6 items-center">
-      <span className="text-gray-400 text-xs w-10 shrink-0">{label}</span>
+      <span className="text-gray-400 text-xs w-24 shrink-0">{label}</span>
       <div className="text-center">
         <p className="text-white font-bold text-base">{fmtN(units)}</p>
         <p className="text-gray-500 text-xs">Sold</p>
@@ -102,9 +103,24 @@ export default async function DealerPage({ params }: PageProps) {
   const mtdAvg = mtdUnits > 0 ? mtdRevenue / mtdUnits : 0;
   const ytdAvg = ytdUnits > 0 ? ytdRevenue / ytdUnits : 0;
 
-  // Pace projections
-  const mtdDailyRate = dayOfMonth > 0 ? mtdUnits / dayOfMonth : 0;
-  const mtdPace = Math.round(mtdDailyRate * daysInMonth);
+  // Canonical projection metadata for the current month (cutoff-aware MTD label
+  // + pace). units/revenue keep their existing inventory_events source; only the
+  // MTD pace denominator and label become cutoff-aware when the month is a
+  // canonical partial-month projection.
+  const { data: msRow } = await db
+    .from("monthly_sales")
+    .select("computed_by, projection_cutoff")
+    .eq("dealer_id", dealerId)
+    .eq("month_start", monthStart)
+    .maybeSingle();
+  const mtdCutoff = isCanonicalRow(msRow?.computed_by) ? (msRow?.projection_cutoff ?? null) : null;
+  const mtdLabel = cutoffLabel(mtdCutoff) ?? "MTD";
+
+  // Pace projections. MTD: cutoff-aware inclusive elapsed days when canonical,
+  // else the existing day-of-month denominator. YTD is unchanged.
+  const mtdPace = mtdCutoff
+    ? cutoffPace(mtdUnits, mtdCutoff, daysInMonth)
+    : Math.round((dayOfMonth > 0 ? mtdUnits / dayOfMonth : 0) * daysInMonth);
   const ytdDailyRate = dayOfYear > 0 ? ytdUnits / dayOfYear : 0;
   const ytdPace = Math.round(ytdDailyRate * daysInYear);
 
@@ -203,7 +219,7 @@ export default async function DealerPage({ params }: PageProps) {
 
       {/* Summary Bar */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
-        <SummaryRow label="MTD" units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
+        <SummaryRow label={mtdLabel} units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
         <div className="border-t border-gray-800" />
         <SummaryRow label="YTD" units={ytdUnits} pace={ytdPace} avg={ytdAvg} total={ytdRevenue} />
       </div>

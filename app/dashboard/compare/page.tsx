@@ -5,6 +5,14 @@ import RoleGuard from "@/components/RoleGuard";
 import CompareClient from "./CompareClient";
 import type { Dealer, InventorySnapshot } from "@/types";
 import type { DealerStat } from "./CompareClient";
+import { isCanonicalRow, cutoffLabel, cutoffDaysOfSupply } from "@/lib/cutoff";
+
+interface MonthlySalesRow {
+  dealer_id: number;
+  units_sold: number | null;
+  computed_by: string | null;
+  projection_cutoff: string | null;
+}
 
 export default async function ComparePage() {
   const supabase = await createServerSupabase();
@@ -47,17 +55,24 @@ export default async function ComparePage() {
     (vehicleData ?? []).map((v: { id: number; year: number | null }) => [v.id, v.year])
   );
 
-  // Fetch MTD sold per dealer
+  // Fetch MTD sold per dealer (with canonical projection metadata)
   const monthStart = new Date();
   monthStart.setDate(1);
   const { data: monthlySales } = await supabase
     .from("monthly_sales")
-    .select("dealer_id, units_sold")
+    .select("dealer_id, units_sold, computed_by, projection_cutoff")
     .eq("month_start", monthStart.toISOString().split("T")[0])
     .in("dealer_id", dealerIds);
   const soldByDealer = new Map(
-    (monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [r.dealer_id, r.units_sold ?? 0])
+    (monthlySales ?? []).map((r: MonthlySalesRow) => [r.dealer_id, r.units_sold ?? 0])
   );
+  // Canonical partial-month cutoff (shared across all rows this month; NULL for
+  // legacy). Derived from projection_cutoff — never hardcoded.
+  const canonicalCutoff =
+    (monthlySales ?? [])
+      .map((r: MonthlySalesRow) => (isCanonicalRow(r.computed_by) ? r.projection_cutoff : null))
+      .find((c): c is string => c != null) ?? null;
+  const cutoffColLabel = cutoffLabel(canonicalCutoff, "Sold Since") ?? "MTD Sold";
 
   // Pre-compute all metrics per dealer
   const dayOfMonth = new Date().getDate();
@@ -66,8 +81,13 @@ export default async function ComparePage() {
 
     const inStock = ds.length;
     const mtdSold = soldByDealer.get(d.id) ?? 0;
+    // Sell-through is a plain sold/inventory ratio (not time-normalized) — unchanged.
     const sellThrough = inStock > 0 ? (mtdSold / inStock) * 100 : 0;
-    const daysOfSupply = mtdSold > 0 ? Math.round((inStock * dayOfMonth) / mtdSold) : null;
+    // Days of Supply IS time-normalized: cutoff-aware inclusive elapsed days when
+    // canonical, else the existing day-of-month denominator.
+    const daysOfSupply = canonicalCutoff
+      ? cutoffDaysOfSupply(inStock, mtdSold, canonicalCutoff)
+      : (mtdSold > 0 ? Math.round((inStock * dayOfMonth) / mtdSold) : null);
 
     const validPrices = ds
       .filter((s) => s.list_price != null && s.list_price > 500)
@@ -119,6 +139,8 @@ export default async function ComparePage() {
         dealers={dealerList}
         dealerStats={dealerStats}
         trendSnapshots={trendSnapshots}
+        soldColumnLabel={canonicalCutoff ? cutoffColLabel : undefined}
+        cutoffActive={canonicalCutoff != null}
       />
     </RoleGuard>
   );

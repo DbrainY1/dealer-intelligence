@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
 import { dedupeProjectedSold } from "@/lib/projected-sold";
 import { pacificDateStr } from "@/lib/dates";
+import { isCanonicalRow, cutoffLabel } from "@/lib/cutoff";
 import type { Dealer, InventoryEvent } from "@/types";
 import MarketCharts, { type DailySoldVehicle } from "./MarketCharts";
 import type { ReactNode } from "react";
@@ -154,8 +155,17 @@ export default async function DashboardPage() {
   // Monthly sold counts — current + comparison months
   const { data: allMonthlySales } = await supabase
     .from("monthly_sales")
-    .select("dealer_id, units_sold, month_start")
+    .select("dealer_id, units_sold, month_start, computed_by, projection_cutoff")
     .in("month_start", [monthStartStr, lastMoMonthStartStr, lastYrMonthStartStr]);
+
+  // Canonical partial-month cutoff for the CURRENT month (NULL for legacy).
+  // Derived from projection_cutoff — never hardcoded.
+  const canonicalCutoff =
+    (allMonthlySales ?? [])
+      .filter((r: { month_start: string }) => r.month_start === monthStartStr)
+      .map((r: { computed_by: string | null; projection_cutoff: string | null }) =>
+        isCanonicalRow(r.computed_by) ? r.projection_cutoff : null)
+      .find((c: string | null): c is string => c != null) ?? null;
 
   const sumSoldForMonth = (ms: string) =>
     (allMonthlySales ?? [])
@@ -464,7 +474,12 @@ export default async function DashboardPage() {
           />
         </div>
 
-        <MarketCharts byDealer={byDealer} dealers={dealerList} />
+        <MarketCharts
+          byDealer={byDealer}
+          dealers={dealerList}
+          soldColumnLabel={canonicalCutoff ? (cutoffLabel(canonicalCutoff, "Sold Since") ?? undefined) : undefined}
+          velocityTitle={canonicalCutoff ? `Sales Velocity (${cutoffLabel(canonicalCutoff)})` : undefined}
+        />
       </div>
     </RoleGuard>
   );
