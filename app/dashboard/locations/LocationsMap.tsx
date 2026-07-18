@@ -136,9 +136,12 @@ const LAYER_LEGENDS: Record<LayerId, { title: string; items: { color: string; la
 
 interface Props {
   dealerData: DealerMapData[];
+  /** Cutoff-aware wording for the sales-velocity legend title, e.g.
+   *  "Sales Velocity (Since Jul 11)". Falls back to the static "(MTD)". */
+  velocityTitle?: string;
 }
 
-export default function LocationsMap({ dealerData }: Props) {
+export default function LocationsMap({ dealerData, velocityTitle }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null);
   const mapInstance     = useRef<any>(null);
   const layerGroupsRef  = useRef<Record<string, any>>({});
@@ -407,10 +410,11 @@ export default function LocationsMap({ dealerData }: Props) {
         >
           {LAYER_CONFIG.filter((l) => activeLayers.has(l.id)).map(({ id, color }) => {
             const legend = LAYER_LEGENDS[id];
+            const title = id === "velocity" && velocityTitle ? velocityTitle : legend.title;
             return (
               <div key={id}>
                 <div className="text-xs font-mono uppercase tracking-wide mb-1.5" style={{ color }}>
-                  {legend.title}
+                  {title}
                 </div>
                 <div className="space-y-1">
                   {legend.items.map((item) => (

@@ -5,7 +5,15 @@ import RoleGuard from "@/components/RoleGuard";
 import CompetitorsPageClient from "./CompetitorsPageClient";
 import { dedupeProjectedSold } from "@/lib/projected-sold";
 import { pacificDaysAgoStr } from "@/lib/dates";
+import { isCanonicalRow, cutoffLabel } from "@/lib/cutoff";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
+
+interface MonthlySalesRow {
+  dealer_id: number;
+  units_sold: number | null;
+  computed_by: string | null;
+  projection_cutoff: string | null;
+}
 
 export default async function CompetitorsPage() {
   const supabase = await createServerSupabase();
@@ -160,13 +168,20 @@ export default async function CompetitorsPage() {
     }
   }
 
-  // MTD sold per dealer
+  // MTD sold per dealer (with canonical projection metadata)
   const { data: monthlySales } = await supabase
     .from("monthly_sales")
-    .select("dealer_id, units_sold")
+    .select("dealer_id, units_sold, computed_by, projection_cutoff")
     .eq("month_start", monthStart.toISOString().split("T")[0])
     .in("dealer_id", dealerIds);
-  const soldByDealer = new Map((monthlySales ?? []).map((r: { dealer_id: number; units_sold: number }) => [r.dealer_id, r.units_sold ?? 0]));
+  const soldByDealer = new Map((monthlySales ?? []).map((r: MonthlySalesRow) => [r.dealer_id, r.units_sold ?? 0]));
+  // Canonical partial-month cutoff (shared across rows this month; NULL for
+  // legacy). Derived from projection_cutoff — never hardcoded.
+  const canonicalCutoff =
+    (monthlySales ?? [])
+      .map((r: MonthlySalesRow) => (isCanonicalRow(r.computed_by) ? r.projection_cutoff : null))
+      .find((c): c is string => c != null) ?? null;
+  const soldLabel = cutoffLabel(canonicalCutoff, "Sold since") ?? "MTD sold";
 
   // Per-dealer scorecard data: inventory count + avg price
   const scorecards = await Promise.all(dealers.map(async (d) => {
@@ -257,6 +272,7 @@ export default async function CompetitorsPage() {
         eventList={eventList}
         estimatedSales={estimatedSales}
         vehicleMap={Object.fromEntries(vehicleMap)}
+        soldLabel={soldLabel}
       />
     </RoleGuard>
   );

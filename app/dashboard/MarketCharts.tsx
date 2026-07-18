@@ -37,9 +37,14 @@ interface DealerRow {
 interface Props {
   byDealer: DealerRow[];
   dealers: Dealer[];
+  /** Cutoff-aware header for the sold column, e.g. "Sold Since Jul 11".
+   *  Falls back to "MTD Sold" when the month is not a canonical projection. */
+  soldColumnLabel?: string;
+  /** Cutoff-aware title for the velocity chart, e.g. "Sales Velocity (Since Jul 11)". */
+  velocityTitle?: string;
 }
 
-export default function MarketCharts({ byDealer, dealers }: Props) {
+export default function MarketCharts({ byDealer, dealers, soldColumnLabel, velocityTitle }: Props) {
   const router = useRouter();
   // Inline expansion: which dealer's Daily Sold vehicle list is open.
   const [expandedDealer, setExpandedDealer] = useState<string | null>(null);
@@ -59,7 +64,7 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
         </ResponsiveContainer>
       </div>
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <p className="text-gray-400 text-sm mb-3">MTD Sales Velocity</p>
+        <p className="text-gray-400 text-sm mb-3">{velocityTitle ?? "MTD Sales Velocity"}</p>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={byDealer}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -77,7 +82,7 @@ export default function MarketCharts({ byDealer, dealers }: Props) {
               <th className="px-4 py-3">Dealer</th>
               <th className="px-4 py-3">In Stock</th>
               <th className="px-4 py-3">Daily Sold</th>
-              <th className="px-4 py-3">MTD Sold</th>
+              <th className="px-4 py-3">{soldColumnLabel ?? "MTD Sold"}</th>
               <th className="px-4 py-3">MTD Added</th>
               <th className="px-4 py-3">MTD Transferred</th>
               <th className="px-4 py-3"></th>

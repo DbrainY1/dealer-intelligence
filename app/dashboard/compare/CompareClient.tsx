@@ -41,6 +41,12 @@ interface Props {
   dealers: Dealer[];
   dealerStats: DealerStat[];
   trendSnapshots?: InventorySnapshot[];
+  /** Cutoff-aware header for the sold column (e.g. "Sold Since Jul 11").
+   *  Falls back to the static "MTD Sold" when the month is not canonical. */
+  soldColumnLabel?: string;
+  /** True when the current month is a canonical partial-month projection —
+   *  switches the Days of Supply tooltip to describe elapsed-day pace. */
+  cutoffActive?: boolean;
 }
 
 const COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#f97316", "#a855f7", "#ef4444"];
@@ -102,10 +108,23 @@ function formatCell(key: SortKey, stat: ExtendedStat): string {
   }
 }
 
-export default function CompareClient({ dealers, dealerStats, trendSnapshots }: Props) {
+export default function CompareClient({ dealers, dealerStats, trendSnapshots, soldColumnLabel, cutoffActive }: Props) {
   const [selected, setSelected] = useState<number[]>([]);
   const [sortCol, setSortCol] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Cutoff-aware column labels/tooltips derived from the canonical projection.
+  // When not canonical, the static month-based wording is preserved exactly.
+  const columns: ColDef[] = COLUMNS.map((c) => {
+    if (c.key === "mtdSold" && soldColumnLabel) return { ...c, label: soldColumnLabel };
+    if (c.key === "sellThrough" && soldColumnLabel) {
+      return { ...c, tooltip: `${soldColumnLabel} ÷ In Stock — share of inventory sold in the canonical window. Higher is better.` };
+    }
+    if (c.key === "daysOfSupply" && cutoffActive) {
+      return { ...c, tooltip: "In Stock ÷ (canonical sold ÷ days since cutoff) — estimated days until the lot is empty at the current canonical sales pace." };
+    }
+    return c;
+  });
 
   const toggleDealer = (id: number) =>
     setSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -177,10 +196,10 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
 
   const exportCsv = () => {
     if (!selectedStats.length) return;
-    const headers = COLUMNS.map((c) => c.label);
+    const headers = columns.map((c) => c.label);
     const rows = [
       headers,
-      ...selectedStats.map((stat) => COLUMNS.map((c) => formatCell(c.key, stat))),
+      ...selectedStats.map((stat) => columns.map((c) => formatCell(c.key, stat))),
     ];
     const csv = rows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -248,7 +267,7 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
             {/* Column header bar */}
             <div className="flex items-center px-4 py-2 border-b border-gray-700 bg-gray-800 min-w-max">
               <div style={{ width: 3, flexShrink: 0 }} />
-              {COLUMNS.map((col) => (
+              {columns.map((col) => (
                 <button
                   key={col.key}
                   onClick={() => handleSort(col.key)}
@@ -285,7 +304,7 @@ export default function CompareClient({ dealers, dealerStats, trendSnapshots }: 
                     }`}
                     style={{ borderLeft: `3px solid ${accent ?? "transparent"}` }}
                   >
-                    {COLUMNS.map((col) => {
+                    {columns.map((col) => {
                       let colorClass = "text-gray-200 text-right";
 
                       if (col.key === "name") {

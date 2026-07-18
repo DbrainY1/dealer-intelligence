@@ -22,6 +22,8 @@ interface Props {
   eventList: InventoryEvent[];
   estimatedSales: InventoryEvent[];
   vehicleMap?: Record<number, VehicleInfo>;
+  /** Cutoff-aware label for the MTD-sold stat, e.g. "Sold since Jul 11". */
+  soldLabel?: string;
 }
 
 export default function CompetitorsPageClient({
@@ -31,6 +33,7 @@ export default function CompetitorsPageClient({
   eventList,
   estimatedSales,
   vehicleMap = {},
+  soldLabel,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(scorecards.map((s) => s.id))
@@ -53,7 +56,7 @@ export default function CompetitorsPageClient({
     <div className="p-6 space-y-6">
       <h1 className="text-white text-xl font-bold">Market Pulse</h1>
 
-      <MarketPulseCards scorecards={scorecards} onSelectionChange={setSelectedIds} />
+      <MarketPulseCards scorecards={scorecards} onSelectionChange={setSelectedIds} soldLabel={soldLabel} />
 
       {/* 90-day trend chart — filtered by selection */}
       <CompetitorCharts dealers={selectedDealers} snapshots={filteredSnapshots} />
