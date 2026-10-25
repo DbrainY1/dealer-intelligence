@@ -6,6 +6,11 @@ import CompetitorsPageClient from "./CompetitorsPageClient";
 import { dedupeProjectedSold } from "@/lib/projected-sold";
 import { pacificDaysAgoStr } from "@/lib/dates";
 import { isCanonicalRow, cutoffLabel } from "@/lib/cutoff";
+import { parseScope } from "@/lib/freshness";
+import { resolveDealerCaptures } from "@/lib/dealer-freshness";
+import { loadPriceTrends } from "@/lib/price-trend";
+import { pacificDateStr } from "@/lib/dates";
+import MarketScopeBar from "@/components/MarketScopeBar";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
 interface MonthlySalesRow {
@@ -15,8 +20,14 @@ interface MonthlySalesRow {
   projection_cutoff: string | null;
 }
 
-export default async function CompetitorsPage() {
+export default async function CompetitorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scope?: string | string[] }>;
+}) {
   const supabase = await createServerSupabase();
+  const scope = parseScope((await searchParams).scope);
+  const todayPacific = pacificDateStr();
 
   // Roster = DB enrollment, same predicate as Locations: scrape_enabled TRUE
   // (scraper) or NULL (HomeNet feed); FALSE (intake/disabled) is excluded.
@@ -29,8 +40,32 @@ export default async function CompetitorsPage() {
   // dealer_id; no consumer reads dealer_group_id), so we do not select an unused
   // column — cast the id/name rows to Dealer to satisfy existing prop types
   // (incl. the untouched VIN modal) without widening the query.
-  const dealers = (enrolledDealers ?? []) as Dealer[];
+  const monitoredDealers = (enrolledDealers ?? []) as Dealer[];
+
+  // Freshness cohort. Everything below — scorecards, charts, tables and the
+  // price window — is built from `dealers`, so the dealers shown and the
+  // figures shown always describe the same set.
+  const captures = await resolveDealerCaptures(
+    supabase,
+    monitoredDealers.map((d) => d.id),
+    todayPacific,
+    scope
+  );
+  const dealers = monitoredDealers.filter((d) => captures.get(d.id)?.inScope === true);
   const dealerIds = dealers.map((d) => d.id);
+
+  const excludedDealers = monitoredDealers
+    .filter((d) => captures.get(d.id)?.inScope !== true)
+    .map((d) => {
+      const c = captures.get(d.id);
+      return {
+        id: d.id,
+        name: d.name,
+        lcd: c?.lcd ?? null,
+        ageDays: c?.ageDays ?? null,
+        freshness: c?.freshness ?? ("historic" as const),
+      };
+    });
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -184,6 +219,11 @@ export default async function CompetitorsPage() {
   const soldLabel = cutoffLabel(canonicalCutoff, "Sold since") ?? "MTD sold";
 
   // Per-dealer scorecard data: inventory count + avg price
+  // 7-day price window for every cohort dealer in ONE paged, set-based read.
+  // This replaces the per-dealer /api/dealer/<id>/price-trend request that
+  // each PriceSparkline used to fire from the browser on mount.
+  const priceTrends = await loadPriceTrends(supabase, dealerIds, todayPacific);
+
   const scorecards = await Promise.all(dealers.map(async (d) => {
     const { data: latest } = await supabase
       .from("inventory_snapshots")
@@ -259,6 +299,15 @@ export default async function CompetitorsPage() {
   return (
     <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
       <CompetitorsPageClient
+        scopeBar={
+          <MarketScopeBar
+            scope={scope}
+            basePath="/dashboard/competitors"
+            cohortCount={dealers.length}
+            monitoredCount={monitoredDealers.length}
+            excluded={excludedDealers}
+          />
+        }
         scorecards={scorecards.map(({ dealer, count, sold, added, removed }) => ({
           id: dealer.id,
           name: dealer.name,
@@ -266,6 +315,7 @@ export default async function CompetitorsPage() {
           sold,
           added,
           removed,
+          trend: priceTrends.get(dealer.id) ?? null,
         }))}
         dealers={dealers}
         snapshots={allSnapshots}

@@ -4,6 +4,8 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
 import { cutoffLabel } from "@/lib/cutoff";
 import { loadMarketOverview } from "@/lib/dashboard-data";
+import { parseScope } from "@/lib/freshness";
+import MarketScopeBar from "@/components/MarketScopeBar";
 import MarketCharts from "./MarketCharts";
 import type { ReactNode } from "react";
 
@@ -80,8 +82,13 @@ function IntelCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scope?: string | string[] }>;
+}) {
   const supabase = await createServerSupabase();
+  const scope = parseScope((await searchParams).scope);
 
   const {
     dealerList,
@@ -95,7 +102,9 @@ export default async function DashboardPage() {
     sellThroughLastYr,
     lastMoStats,
     lastYrStats,
-  } = await loadMarketOverview(supabase);
+    excludedDealers,
+    monitoredDealerCount,
+  } = await loadMarketOverview(supabase, new Date(), scope);
 
   const today = new Date();
 
@@ -117,6 +126,14 @@ export default async function DashboardPage() {
             timeZone: "America/Los_Angeles",
           })}
         </h1>
+
+        <MarketScopeBar
+          scope={scope}
+          basePath="/dashboard"
+          cohortCount={dealerList.length}
+          monitoredCount={monitoredDealerCount}
+          excluded={excludedDealers}
+        />
 
         {/* 2×2 Intel Cards */}
         <div className="grid grid-cols-2 gap-3 max-w-[900px]">

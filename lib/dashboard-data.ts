@@ -7,8 +7,12 @@
 //
 // Query shape: three dependency waves, all set-based. The previous
 // implementation issued roughly `6N + 18` requests for N dealers across six
-// sequential waves; this issues a fixed 15 plus one extra page per 1,000 rows
-// on the large reads, and no longer scales with the dealer roster.
+// sequential waves; this issues a small fixed set plus one extra page per
+// 1,000 rows on the large reads, and no longer scales with the dealer roster.
+//
+// Figures describe the freshness cohort selected by `scope`, never the whole
+// roster. Dealers outside the cohort are reported separately in
+// `excludedDealers` — they are withheld, not zeroed.
 
 import { dedupeProjectedSold } from "./projected-sold.ts";
 import { pacificDateStr } from "./dates.ts";
@@ -30,6 +34,17 @@ import {
   type DealerRow,
   type SnapshotStats,
 } from "./dashboard-metrics.ts";
+import {
+  resolveDealerCaptures,
+  loadCohortSnapshots,
+  inventoryByDealerFrom,
+  type DealerCapture,
+} from "./dealer-freshness.ts";
+import {
+  DEFAULT_SCOPE,
+  type Freshness,
+  type MarketScope,
+} from "./freshness.ts";
 import type { Dealer, InventoryEvent } from "../types/index.ts";
 
 /** Minimal shape of the PostgREST client this loader needs. */
@@ -38,7 +53,17 @@ export interface SupabaseLike {
   from(table: string): any;
 }
 
+/** A dealer held out of the current market, with the reason it was held out. */
+export interface ExcludedDealer {
+  id: number;
+  name: string;
+  lcd: string | null;
+  ageDays: number | null;
+  freshness: Freshness;
+}
+
 export interface MarketOverview {
+  /** The in-scope cohort. Every headline figure below derives from exactly this set. */
   dealerList: Dealer[];
   byDealer: DealerRow[];
   canonicalCutoff: string | null;
@@ -50,6 +75,13 @@ export interface MarketOverview {
   sellThroughLastYr: number | null;
   lastMoStats: SnapshotStats | null;
   lastYrStats: SnapshotStats | null;
+  /** Freshness context for the UI. */
+  scope: MarketScope;
+  todayPacific: string;
+  captures: Map<number, DealerCapture>;
+  excludedDealers: ExcludedDealer[];
+  /** Full monitored roster size, before the freshness filter. */
+  monitoredDealerCount: number;
 }
 
 type Supa = SupabaseLike;
@@ -109,9 +141,13 @@ async function getSnapshotStats(
  */
 export async function loadMarketOverview(
   supabase: Supa,
-  now: Date = new Date()
+  now: Date = new Date(),
+  scope: MarketScope = DEFAULT_SCOPE
 ): Promise<MarketOverview> {
   const today = now;
+  // Freshness is measured on Pacific calendar days, matching the timezone the
+  // DBRAIN capture pipeline is scheduled in.
+  const todayPacific = pacificDateStr(now);
   // ── Dynamic date anchors ────────────────────────────────────────────────────
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const monthStartStr = monthStart.toISOString().split("T")[0];
@@ -150,7 +186,6 @@ export async function loadMarketOverview(
   const [
     dealersRes,
     monthlySalesRes,
-    globalLatestRes,
     lastMoDate,
     lastYrDate,
     dailySoldRaw,
@@ -167,15 +202,6 @@ export async function loadMarketOverview(
       .from("monthly_sales")
       .select("dealer_id, units_sold, month_start, computed_by, projection_cutoff")
       .in("month_start", [monthStartStr, lastMoMonthStartStr, lastYrMonthStartStr]),
-
-    // Newest snapshot date anywhere. No dealer can hold a snapshot later than
-    // this, so any dealer present on this date has it as its own latest date.
-    supabase
-      .from("inventory_snapshots")
-      .select("snapshot_date")
-      .order("snapshot_date", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
 
     latestSnapshotDateOnOrBefore(supabase, lastMoCutoffStr),
     latestSnapshotDateOnOrBefore(supabase, lastYrCutoffStr),
@@ -234,14 +260,14 @@ export async function loadMarketOverview(
   const dealerList: Dealer[] = (dealersRes.data as Dealer[] | null) ?? [];
   const allMonthlySales: MonthlySalesRow[] =
     (monthlySalesRes.data as MonthlySalesRow[] | null) ?? [];
-  const globalLatestDate =
-    (globalLatestRes.data as { snapshot_date: string } | null)?.snapshot_date ?? null;
 
   // Canonical partial-month cutoff for the CURRENT month (NULL for legacy).
   // Derived from projection_cutoff — never hardcoded.
   const canonicalCutoff = deriveCanonicalCutoff(allMonthlySales, monthStartStr);
 
-  const soldThisMonth = sumSoldForMonth(allMonthlySales, monthStartStr);
+  // Comparison-period sums stay whole-market: their denominators
+  // (lastMoStats / lastYrStats) are whole-market counts on those historical
+  // dates, so both sides of those ratios already describe the same population.
   const soldLastMo = sumSoldForMonth(allMonthlySales, lastMoMonthStartStr);
   const soldLastYr = sumSoldForMonth(allMonthlySales, lastYrMonthStartStr);
 
@@ -271,10 +297,17 @@ export async function loadMarketOverview(
   const dailyVehicleIds = [...new Set(dailyProjected.map((e) => e.vehicle_id))];
 
   // ── Wave 2 — reads that needed Wave 1's results ─────────────────────────────
-  const [currentRows, lastMoStats, lastYrStats, dailyVehicleRows] = await Promise.all([
-    globalLatestDate
-      ? snapshotRowsOnDate(supabase, globalLatestDate, "current snapshots")
-      : Promise.resolve([] as SnapshotMetricRow[]),
+  //
+  // The cohort is resolved from each dealer's own LCD and filtered to the
+  // selected freshness scope BEFORE any total is computed, so the dealers
+  // listed and the dealers summed are the same set by construction.
+  const [captures, lastMoStats, lastYrStats, dailyVehicleRows] = await Promise.all([
+    resolveDealerCaptures(
+      supabase,
+      dealerList.map((d) => d.id),
+      todayPacific,
+      scope
+    ),
 
     getSnapshotStats(supabase, lastMoDate, "last-month snapshots"),
     getSnapshotStats(supabase, lastYrDate, "last-year snapshots"),
@@ -289,49 +322,37 @@ export async function loadMarketOverview(
     ),
   ]);
 
-  // Per-dealer inventory at each dealer's own latest snapshot date.
-  const inventoryByDealer = new Map<number, number>();
-  const pricedRows: SnapshotMetricRow[] = [];
-  for (const r of currentRows) {
-    inventoryByDealer.set(r.dealer_id, (inventoryByDealer.get(r.dealer_id) ?? 0) + 1);
-    pricedRows.push(r);
-  }
+  // Snapshot rows for the in-scope cohort only, each dealer read at its own
+  // LCD. Out-of-scope dealers contribute no rows — they are absent from the
+  // market view, NOT recorded as zero inventory.
+  const cohortRows = await loadCohortSnapshots(supabase, captures);
+  const inventoryByDealer = inventoryByDealerFrom(cohortRows);
+  const pricedRows: SnapshotMetricRow[] = cohortRows;
 
-  // A dealer absent from the newest market-wide snapshot date has an older
-  // latest date of its own; resolve those individually. This is normally empty
-  // and is bounded by the number of stale dealers, not the roster size.
-  const staleDealers = dealerList.filter((d) => !inventoryByDealer.has(d.id));
-  if (staleDealers.length > 0) {
-    const staleResults = await Promise.all(
-      staleDealers.map(async (d) => {
-        const { data: latest } = await supabase
-          .from("inventory_snapshots")
-          .select("snapshot_date")
-          .eq("dealer_id", d.id)
-          .order("snapshot_date", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const snapDate = (latest as { snapshot_date: string } | null)?.snapshot_date;
-        if (!snapDate) return null;
-        const rows = await fetchAllRows<SnapshotMetricRow>(
-          `stale dealer ${d.id} snapshots`,
-          (from, to) =>
-            supabase
-              .from("inventory_snapshots")
-              .select("dealer_id, list_price")
-              .eq("dealer_id", d.id)
-              .eq("snapshot_date", snapDate)
-              .range(from, to)
-        );
-        return { id: d.id, rows };
-      })
-    );
-    for (const res of staleResults) {
-      if (!res) continue;
-      inventoryByDealer.set(res.id, res.rows.length);
-      pricedRows.push(...res.rows);
-    }
-  }
+  // The dealers the page lists. Identical to the set the totals come from.
+  const cohortDealers = dealerList.filter((d) => captures.get(d.id)?.inScope === true);
+
+  // Current-period sell-through must divide the cohort's sales by the cohort's
+  // inventory. Summing sales across the whole roster while the denominator
+  // covers only in-scope dealers would inflate the rate.
+  const cohortIds = new Set(cohortDealers.map((d) => d.id));
+  const soldThisMonth = sumSoldForMonth(
+    allMonthlySales.filter((r) => cohortIds.has(r.dealer_id)),
+    monthStartStr
+  );
+
+  const excludedDealers: ExcludedDealer[] = dealerList
+    .filter((d) => captures.get(d.id)?.inScope !== true)
+    .map((d) => {
+      const c = captures.get(d.id);
+      return {
+        id: d.id,
+        name: d.name,
+        lcd: c?.lcd ?? null,
+        ageDays: c?.ageDays ?? null,
+        freshness: c?.freshness ?? "historic",
+      };
+    });
 
   // ── Wave 3 — latest mileage for the Daily Sold vehicles ─────────────────────
   const dailyVehicleMap = new Map<number, VehicleDetail>();
@@ -384,8 +405,10 @@ export async function loadMarketOverview(
   // ── Derived values ──────────────────────────────────────────────────────────
   const dailyByDealer = groupDailySoldByDealer(dailyProjected, dailyVehicleMap);
 
+  // Built from the cohort, not the full roster: an out-of-scope dealer must
+  // not appear as a row of zeros, which would read as an empty lot.
   const byDealer = buildDealerRows(
-    dealerList,
+    cohortDealers,
     inventoryByDealer,
     allMonthlySales,
     monthStartStr,
@@ -403,8 +426,13 @@ export async function loadMarketOverview(
   const sellThroughLastYr = sellThroughComparison(lastYrStats, soldLastYr);
 
   return {
-    dealerList,
+    dealerList: cohortDealers,
     byDealer,
+    scope,
+    todayPacific,
+    captures,
+    excludedDealers,
+    monitoredDealerCount: dealerList.length,
     canonicalCutoff,
     activeDealersToday,
     totalInventory,

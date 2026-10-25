@@ -24,6 +24,8 @@ interface Props {
   vehicleMap?: Record<number, VehicleInfo>;
   /** Cutoff-aware label for the MTD-sold stat, e.g. "Sold since Jul 11". */
   soldLabel?: string;
+  /** Server-rendered freshness scope control, placed inside the page layout. */
+  scopeBar?: React.ReactNode;
 }
 
 export default function CompetitorsPageClient({
@@ -34,6 +36,7 @@ export default function CompetitorsPageClient({
   estimatedSales,
   vehicleMap = {},
   soldLabel,
+  scopeBar,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(scorecards.map((s) => s.id))
@@ -55,6 +58,8 @@ export default function CompetitorsPageClient({
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-white text-xl font-bold">Market Pulse</h1>
+
+      {scopeBar}
 
       <MarketPulseCards scorecards={scorecards} onSelectionChange={setSelectedIds} soldLabel={soldLabel} />
 

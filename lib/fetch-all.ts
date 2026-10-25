@@ -60,6 +60,50 @@ export async function fetchAllRows<T>(
   return out;
 }
 
+/**
+ * Read every row by asking for the exact count first, then fetching all pages
+ * CONCURRENTLY.
+ *
+ * `fetchAllRows` walks pages one at a time because it cannot know where the
+ * data ends. For a wide window that means N sequential round trips. When the
+ * row count can be obtained cheaply with a `head` request, this issues the
+ * pages in parallel instead, so latency is two round trips rather than N.
+ *
+ * Falls back to the sequential walk if the count is unavailable.
+ */
+export async function fetchAllRowsCounted<T>(
+  label: string,
+  count: () => PromiseLike<{ count: number | null; error: { message: string } | null }>,
+  page: (from: number, to: number) => PromiseLike<PageResult<T>>
+): Promise<T[]> {
+  const { count: total, error } = await count();
+
+  if (error || total == null) {
+    if (error) console.error(`[dashboard] ${label}: count failed (${error.message}) — paging sequentially`);
+    return fetchAllRows(label, page);
+  }
+  if (total === 0) return [];
+
+  const pages = Math.min(Math.ceil(total / PAGE_SIZE), MAX_PAGES);
+  if (pages >= MAX_PAGES) {
+    console.error(`[dashboard] ${label}: ${total} rows exceeds MAX_PAGES (${MAX_PAGES}) — result may be incomplete`);
+  }
+
+  const results = await Promise.all(
+    Array.from({ length: pages }, (_, i) =>
+      Promise.resolve(page(i * PAGE_SIZE, i * PAGE_SIZE + PAGE_SIZE - 1)).then((r) => {
+        if (r.error) {
+          console.error(`[dashboard] ${label}: page ${i} failed (${r.error.message})`);
+          return [] as T[];
+        }
+        return r.data ?? [];
+      })
+    )
+  );
+
+  return results.flat();
+}
+
 /** Split `ids` into chunks small enough for a PostgREST `in.(…)` filter. */
 export function chunk<T>(ids: T[], size: number): T[][] {
   const out: T[][] = [];
