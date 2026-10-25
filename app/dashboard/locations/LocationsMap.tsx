@@ -134,6 +134,12 @@ const LAYER_LEGENDS: Record<LayerId, { title: string; items: { color: string; la
   },
 };
 
+// CARTO enforces an API key on basemaps.cartocdn.com. Unkeyed raster requests
+// return HTTP 200 with an "API KEY REQUIRED" watermark tile instead of map
+// imagery, so we only attach the basemap when a key is present and surface a
+// warning otherwise rather than rendering the watermark.
+const CARTO_API_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+
 interface Props {
   dealerData: DealerMapData[];
   /** Cutoff-aware wording for the sales-velocity legend title, e.g.
@@ -164,10 +170,20 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
       const map = L.map(mapRef.current, { center: [36.13, -115.13], zoom: 12.5, zoomControl: true });
       mapInstance.current = map;
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-        maxZoom: 19,
-      }).addTo(map);
+      if (CARTO_API_KEY) {
+        L.tileLayer(
+          `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_API_KEY)}`,
+          {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 19,
+          },
+        ).addTo(map);
+      } else {
+        console.warn(
+          "[LocationsMap] NEXT_PUBLIC_CARTO_API_KEY is not set — the CARTO basemap is disabled. " +
+            "Set it in .env.local for local development and in the Vercel project environment for deployments.",
+        );
+      }
 
       // DB-driven markers. Each row carries its own coordinates, group, and
       // metrics — all built per dealer_id in page.tsx — so metrics attach to
@@ -394,6 +410,17 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
           className="w-full rounded-lg border border-gray-800 overflow-hidden"
           style={{ height: "calc(100vh - 300px)", minHeight: "500px" }}
         />
+
+        {/* Missing-key warning — the basemap is absent, pins still render */}
+        {!CARTO_API_KEY && (
+          <div
+            style={{ position: "absolute", top: "12px", left: "50%", transform: "translateX(-50%)", zIndex: 1000 }}
+            className="bg-amber-950 border border-amber-700 text-amber-200 rounded-lg px-4 py-2 text-xs max-w-md text-center"
+          >
+            Basemap disabled — <span className="font-mono">NEXT_PUBLIC_CARTO_API_KEY</span> is not set.
+            Dealer pins and intelligence layers are unaffected.
+          </div>
+        )}
 
         {/* Layer legend — fades in when any layer is active */}
         <div
