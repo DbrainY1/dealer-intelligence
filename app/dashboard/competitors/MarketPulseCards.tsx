@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import PriceSparkline from "@/components/PriceSparkline";
+import type { PriceTrend } from "@/lib/price-trend";
 
 export interface ScorecardRow {
   id: number;
@@ -25,6 +26,8 @@ export interface ScorecardRow {
   sold: number | null; // null = no monthly_sales row (render "—"); real 0 stays 0
   added: number | null;
   removed: number | null;
+  /** 7-day price window, computed server-side. Null = no priced observation. */
+  trend: PriceTrend | null;
 }
 
 function SortableCard({
@@ -93,7 +96,7 @@ function SortableCard({
 
         {/* Avg price stats */}
         <div className="my-1" onClick={(e) => e.stopPropagation()}>
-          <PriceSparkline dealerId={row.id} />
+          <PriceSparkline trend={row.trend} />
         </div>
 
         <div className="flex justify-between border-t border-gray-800 pt-2 text-xs">

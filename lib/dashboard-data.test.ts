@@ -279,6 +279,14 @@ async function loadMarketOverviewLegacy(
   return {
     dealerList: dealerList as any,
     byDealer,
+    // The legacy loader had no freshness concept: every monitored dealer was
+    // always in scope. These fields exist only so the two return types line
+    // up for comparison.
+    scope: "current_recent" as const,
+    todayPacific: pacificDateStr(now),
+    captures: new Map(),
+    excludedDealers: [],
+    monitoredDealerCount: dealerList.length,
     canonicalCutoff,
     activeDealersToday,
     totalInventory,
@@ -397,8 +405,10 @@ test("identical results: typical multi-dealer market", async () => {
   assert.equal(newOut.activeDealersToday, 3);
 });
 
-test("identical results: dealer with no snapshots at all", async () => {
-  // The dealer must report zeros for count AND sold despite a monthly_sales row.
+test("DIVERGENCE: a dealer that never captured is omitted, not shown as zero inventory", async () => {
+  // Legacy rendered this dealer as a row of zeros, which reads as "this lot is
+  // empty". A missing capture is not an empty lot, so it is now omitted from
+  // the market and reported separately.
   const tables = build({
     dealers: [{ id: 1, name: "Alpha" }, { id: 2, name: "Ghost" }],
     snapshots: { 1: [["2026-10-24", 10000]] },
@@ -408,14 +418,27 @@ test("identical results: dealer with no snapshots at all", async () => {
     ],
   });
   const { oldOut, newOut } = await bothLoaders(tables);
-  assertSameOverview(oldOut, newOut);
-  const ghost = newOut.byDealer.find((d) => d.name === "Ghost")!;
-  assert.equal(ghost.count, 0);
-  assert.equal(ghost.sold, 0, "no-snapshot dealer must not surface its monthly_sales");
+
+  const legacyGhost = oldOut.byDealer.find((d) => d.name === "Ghost")!;
+  assert.equal(legacyGhost.count, 0, "legacy listed it with zero inventory");
+
+  assert.equal(
+    newOut.byDealer.find((d) => d.name === "Ghost"),
+    undefined,
+    "a never-captured dealer must not be listed as zero inventory"
+  );
+  const ex = newOut.excludedDealers.find((d) => d.name === "Ghost")!;
+  assert.equal(ex.freshness, "historic");
+  assert.equal(ex.lcd, null);
+
+  // And its monthly_sales row is still never surfaced as market activity.
+  assert.equal(newOut.totalInventory, 1);
+  assert.equal(newOut.byDealer.length, 1);
 });
 
-test("identical results: stale dealer whose latest snapshot predates the market", async () => {
-  // Exercises the new loader's stale-dealer fallback path.
+test("DIVERGENCE: a 23-day-old capture is excluded from the market, not counted", async () => {
+  // This is the production defect, in miniature. Pre-change the dealer's
+  // 23-day-old inventory was summed into the headline total as if current.
   const tables = build({
     dealers: [{ id: 1, name: "Current" }, { id: 2, name: "Stale" }],
     snapshots: {
@@ -425,11 +448,47 @@ test("identical results: stale dealer whose latest snapshot predates the market"
     monthlySales: [{ dealer_id: 2, units_sold: 6, month_start: MONTH_START }],
   });
   const { oldOut, newOut } = await bothLoaders(tables);
-  assertSameOverview(oldOut, newOut);
-  const stale = newOut.byDealer.find((d) => d.name === "Stale")!;
-  assert.equal(stale.count, 2, "stale dealer counts its OWN latest date, not the market's");
-  assert.equal(stale.sold, 6);
-  assert.equal(newOut.totalInventory, 4);
+
+  assert.equal(oldOut.totalInventory, 4, "legacy counted the 23-day-old capture");
+  assert.equal(newOut.totalInventory, 2, "only the in-scope dealer is counted");
+  assert.equal(newOut.byDealer.length, 1, "and only that dealer is listed");
+  assert.equal(newOut.byDealer[0].name, "Current");
+
+  // Held out, not zeroed — the distinction the product rules require.
+  const excluded = newOut.excludedDealers.find((d) => d.name === "Stale")!;
+  assert.ok(excluded, "excluded dealers are reported, not silently dropped");
+  assert.equal(excluded.freshness, "historic");
+  assert.equal(
+    excluded.lcd,
+    null,
+    "LCD lookback is bounded to the 14-day window; older than that is reported " +
+      "as historic with an unknown date rather than costing a per-dealer query"
+  );
+  assert.equal(
+    newOut.byDealer.find((d) => d.name === "Stale"),
+    undefined,
+    "it must NOT appear as a zero-inventory row"
+  );
+  assert.equal(newOut.monitoredDealerCount, 2, "full monitored roster still reported");
+});
+
+test("Stale (8–14 days) is excluded from the market but keeps a visible LCD", async () => {
+  const tables = build({
+    dealers: [{ id: 1, name: "Current" }, { id: 2, name: "TenDays" }],
+    snapshots: {
+      1: [["2026-10-24", 20000]],
+      2: [["2026-10-14", 9000], ["2026-10-14", 11000]],
+    },
+  });
+  const { newOut } = await bothLoaders(tables);
+
+  assert.equal(newOut.totalInventory, 1, "stale inventory is not in the total");
+  assert.equal(newOut.byDealer.length, 1);
+
+  const ex = newOut.excludedDealers.find((d) => d.name === "TenDays")!;
+  assert.equal(ex.freshness, "stale");
+  assert.equal(ex.lcd, "2026-10-14", "inside the window, the real LCD is resolved");
+  assert.equal(ex.ageDays, 10);
 });
 
 test("identical results: canonical cutoff derived from projection_cutoff", async () => {
