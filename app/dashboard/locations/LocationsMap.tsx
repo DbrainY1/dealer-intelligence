@@ -173,12 +173,8 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
       mapInstance.current = map;
 
       if (CARTO_API_KEY) {
-        // CARTO documents exactly one keyed raster form:
-        //   https://basemaps.cartocdn.com/rastertiles/<style>/{z}/{x}/{y}.png?key=…
-        // The previous URL used the legacy `/light_all/` path on the {s}
-        // subdomains, which is not documented for keyed access.
         const layer = L.tileLayer(
-          `https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_API_KEY)}`,
+          `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_API_KEY)}`,
           {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
             maxZoom: 19,
@@ -188,7 +184,9 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
         // A rejected key fails silently: CARTO answers 403 for a key whose
         // domain restrictions do not list the requesting origin, Leaflet drops
         // the tile, and the map renders as a blank grey panel with the
-        // attribution still showing. Surface that instead.
+        // attribution still showing. That happened in production — the key
+        // allowed dealer-intelligence.vercel.app but not dealersintel.com — and
+        // took a full investigation to identify because nothing surfaced it.
         //
         // Only report when NO tile has ever loaded — a fully rejected basemap
         // raises tileerror for every tile and never tileload, while one flaky
