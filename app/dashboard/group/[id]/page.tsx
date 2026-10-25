@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { loadSoldUnits } from "@/lib/sold-units";
 import Link from "next/link";
 import type { Dealer, DealerGroup, InventorySnapshot, InventoryEvent } from "@/types";
 
@@ -22,6 +23,10 @@ export default async function GroupPage({ params }: PageProps) {
 
   const dealerList: Dealer[] = dealers ?? [];
   const dealerIds = dealerList.map((d) => d.id);
+
+  // Shared sold-units provider: verified counts for scraper dealers, the
+  // Estimated Departures estimate for dealer-supplied feeds.
+  const soldUnits = await loadSoldUnits(supabase, dealerIds, new Date());
 
   const { data: snapshots } = await supabase
     .from("inventory_snapshots")
@@ -72,7 +77,12 @@ export default async function GroupPage({ params }: PageProps) {
             ? Math.round(dealerSnaps.reduce((sum, s) => sum + (s.list_price ?? 0), 0) / dealerSnaps.length)
             : 0;
           // MTD Sold = vehicles leaving this dealer (from_dealer_id)
-          const soldCount = eventList.filter((e) => e.from_dealer_id === d.id && e.event_type === "sold").length;
+          const verifiedSold = eventList.filter((e) => e.from_dealer_id === d.id && e.event_type === "sold").length;
+          // Feed dealers emit no canonical sold event, so fall back to the
+          // shared estimate rather than showing a structural zero.
+          const su = soldUnits.byDealer.get(d.id);
+          const isEstimate = su?.basis === "estimated";
+          const soldCount = isEstimate ? (su?.units ?? 0) : verifiedSold;
           // MTD Added = vehicles arriving at this dealer (to_dealer_id)
           const addedCount = eventList.filter((e) => e.to_dealer_id === d.id && e.event_type === "added").length;
           // MTD Transferred = vehicles moving within same group (to_dealer_id)
@@ -92,7 +102,10 @@ export default async function GroupPage({ params }: PageProps) {
                   </div>
                   <div>
                     <p className="text-gray-400">MTD Sold</p>
-                    <p className="text-white font-bold">{soldCount}</p>
+                    <p className={isEstimate ? "text-amber-300 font-bold" : "text-white font-bold"}>
+                      {soldCount}
+                      {isEstimate && <span className="ml-1 text-[10px] uppercase text-amber-400">est</span>}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-400">MTD Added</p>

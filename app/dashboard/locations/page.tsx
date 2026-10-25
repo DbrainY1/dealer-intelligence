@@ -5,6 +5,7 @@ import RoleGuard from "@/components/RoleGuard";
 import LocationsMap from "./LocationsMap";
 import type { DealerMapData } from "./LocationsMap";
 import { isCanonicalRow, cutoffLabel, cutoffDaysOfSupply } from "@/lib/cutoff";
+import { loadSoldUnits } from "@/lib/sold-units";
 
 interface MonthlySalesRow {
   dealer_id: number;
@@ -80,12 +81,10 @@ export default async function LocationsPage() {
     .select("dealer_id, units_sold, computed_by, projection_cutoff")
     .eq("month_start", monthStart.toISOString().split("T")[0])
     .in("dealer_id", dealerIds);
-  const soldByDealer = new Map(
-    (monthlySales ?? []).map((r: MonthlySalesRow) => [
-      r.dealer_id,
-      r.units_sold ?? 0,
-    ])
-  );
+  // Shared provider — verified counts plus feed-dealer estimates.
+  const soldUnits = await loadSoldUnits(supabase, dealerIds, new Date());
+  const soldByDealer = new Map<number, number>();
+  for (const [id, s] of soldUnits.byDealer) if (s.units !== null) soldByDealer.set(id, s.units);
   // Canonical partial-month cutoff (shared across rows this month; NULL for
   // legacy). Derived from projection_cutoff — never hardcoded.
   const canonicalCutoff =

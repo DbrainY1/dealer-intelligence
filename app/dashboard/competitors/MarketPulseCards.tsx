@@ -28,6 +28,8 @@ export interface ScorecardRow {
   removed: number | null;
   /** 7-day price window, computed server-side. Null = no priced observation. */
   trend: PriceTrend | null;
+  /** Whether `sold` is a verified count or a feed-derived estimate. */
+  soldBasis?: "verified" | "estimated";
 }
 
 function SortableCard({
@@ -89,8 +91,12 @@ function SortableCard({
             <p className="text-gray-500 text-xs">in stock</p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-green-400">{row.sold == null ? "—" : row.sold}</p>
-            <p className="text-gray-500 text-xs">{soldLabel}</p>
+            <p className={`text-2xl font-bold ${row.soldBasis === "estimated" ? "text-amber-300" : "text-green-400"}`}>
+              {row.sold == null ? "—" : row.sold}
+            </p>
+            <p className="text-gray-500 text-xs">
+              {row.soldBasis === "estimated" ? "est. sales" : soldLabel}
+            </p>
           </div>
         </div>
 
@@ -174,9 +180,9 @@ export default function MarketPulseCards({ scorecards, onSelectionChange, soldLa
 
   const exportCSV = () => {
     const rows = sorted.filter((s) => selected.has(s.id));
-    const header = "Dealer,In Stock,MTD Sold,Added This Week,Removed This Week";
+    const header = "Dealer,In Stock,MTD Sold,Sold Basis,Added This Week,Removed This Week";
     // Preserve missing (—) vs real zero: a null monthly_sales row exports as "—", a real 0 exports as 0.
-    const lines = rows.map((s) => `${s.name},${s.count},${s.sold == null ? "—" : s.sold},${s.added},${s.removed}`);
+    const lines = rows.map((s) => `${s.name},${s.count},${s.sold == null ? "—" : s.sold},${s.soldBasis === "estimated" ? "estimated" : "verified"},${s.added},${s.removed}`);
     const csv = [header, ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);

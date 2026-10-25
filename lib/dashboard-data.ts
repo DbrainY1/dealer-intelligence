@@ -16,6 +16,7 @@
 
 import { dedupeProjectedSold } from "./projected-sold.ts";
 import { pacificDateStr } from "./dates.ts";
+import { loadSoldUnits, sumSoldUnits, type SoldUnitsResult } from "./sold-units.ts";
 import { fetchAllRows, chunk } from "./fetch-all.ts";
 import {
   deriveCanonicalCutoff,
@@ -82,6 +83,10 @@ export interface MarketOverview {
   excludedDealers: ExcludedDealer[];
   /** Full monitored roster size, before the freshness filter. */
   monitoredDealerCount: number;
+  /** Verified + estimated units behind every sales figure on this page. */
+  soldUnits: SoldUnitsResult;
+  /** True when any cohort dealer's units are an estimate. */
+  includesEstimatedSales: boolean;
 }
 
 type Supa = SupabaseLike;
@@ -142,7 +147,9 @@ async function getSnapshotStats(
 export async function loadMarketOverview(
   supabase: Supa,
   now: Date = new Date(),
-  scope: MarketScope = DEFAULT_SCOPE
+  scope: MarketScope = DEFAULT_SCOPE,
+  /** Test seam: override which dealers are served by the estimator. */
+  feedDealerIds?: number[]
 ): Promise<MarketOverview> {
   const today = now;
   // Freshness is measured on Pacific calendar days, matching the timezone the
@@ -335,11 +342,14 @@ export async function loadMarketOverview(
   // Current-period sell-through must divide the cohort's sales by the cohort's
   // inventory. Summing sales across the whole roster while the denominator
   // covers only in-scope dealers would inflate the rate.
-  const cohortIds = new Set(cohortDealers.map((d) => d.id));
-  const soldThisMonth = sumSoldForMonth(
-    allMonthlySales.filter((r) => cohortIds.has(r.dealer_id)),
-    monthStartStr
-  );
+  const cohortIds = cohortDealers.map((d) => d.id);
+
+  // Units for the cohort from the single shared provider: monthly_sales for
+  // verified dealers, the Estimated Departures estimator for feed dealers.
+  // Both are month-to-date on the Pacific calendar, so the sell-through
+  // numerator and denominator describe the same period and the same dealers.
+  const soldUnits = await loadSoldUnits(supabase, cohortIds, now, feedDealerIds);
+  const soldThisMonth = sumSoldUnits(soldUnits, cohortIds).total;
 
   const excludedDealers: ExcludedDealer[] = dealerList
     .filter((d) => captures.get(d.id)?.inScope !== true)
@@ -410,8 +420,7 @@ export async function loadMarketOverview(
   const byDealer = buildDealerRows(
     cohortDealers,
     inventoryByDealer,
-    allMonthlySales,
-    monthStartStr,
+    soldUnits.byDealer,
     addedByDealer,
     transferredByDealer,
     dailyByDealer
@@ -433,6 +442,8 @@ export async function loadMarketOverview(
     captures,
     excludedDealers,
     monitoredDealerCount: dealerList.length,
+    soldUnits,
+    includesEstimatedSales: soldUnits.estimatedDealerIds.length > 0,
     canonicalCutoff,
     activeDealersToday,
     totalInventory,
