@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test lib/vin-history.test.ts"
+    "test": "node --experimental-strip-types --test lib/vin-history.test.ts lib/dashboard-metrics.test.ts lib/dashboard-data.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
