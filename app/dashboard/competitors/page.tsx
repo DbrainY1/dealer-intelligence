@@ -9,6 +9,7 @@ import { isCanonicalRow, cutoffLabel } from "@/lib/cutoff";
 import { parseScope } from "@/lib/freshness";
 import { resolveDealerCaptures } from "@/lib/dealer-freshness";
 import { loadPriceTrends } from "@/lib/price-trend";
+import { loadSoldUnits } from "@/lib/sold-units";
 import { pacificDateStr } from "@/lib/dates";
 import MarketScopeBar from "@/components/MarketScopeBar";
 import EstimatedDeparturesPanel from "@/components/EstimatedDeparturesPanel";
@@ -211,7 +212,12 @@ export default async function CompetitorsPage({
     .select("dealer_id, units_sold, computed_by, projection_cutoff")
     .eq("month_start", monthStart.toISOString().split("T")[0])
     .in("dealer_id", dealerIds);
-  const soldByDealer = new Map((monthlySales ?? []).map((r: MonthlySalesRow) => [r.dealer_id, r.units_sold ?? 0]));
+  // Units come from the shared provider: monthly_sales for verified dealers,
+  // the Estimated Departures estimator for feed dealers. monthly_sales above
+  // is still read for the canonical cutoff metadata only.
+  const soldUnits = await loadSoldUnits(supabase, dealerIds, new Date());
+  const soldByDealer = new Map<number, number>();
+  for (const [id, s] of soldUnits.byDealer) if (s.units !== null) soldByDealer.set(id, s.units);
   // Canonical partial-month cutoff (shared across rows this month; NULL for
   // legacy). Derived from projection_cutoff — never hardcoded.
   const canonicalCutoff =
@@ -326,6 +332,7 @@ export default async function CompetitorsPage({
           sold,
           added,
           removed,
+          soldBasis: soldUnits.byDealer.get(dealer.id)?.basis ?? "verified",
           trend: priceTrends.get(dealer.id) ?? null,
         }))}
         dealers={dealers}

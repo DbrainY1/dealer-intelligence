@@ -193,7 +193,7 @@ async function loadMarketOverviewLegacy(
         .single();
       if (!latestDate)
         return {
-          name: d.name, count: 0, sold: 0, added: 0, transferred: 0,
+          name: d.name, count: 0, sold: 0, soldBasis: "verified" as const, added: 0, transferred: 0,
           dailySold: dailyByDealer.get(d.id)?.count ?? 0,
           dailySoldVehicles: dailyByDealer.get(d.id)?.vehicles ?? [],
         };
@@ -223,6 +223,7 @@ async function loadMarketOverviewLegacy(
         name: d.name,
         count: count ?? 0,
         sold: soldByDealer?.units_sold ?? 0,
+        soldBasis: "verified" as const,
         added: addedEvents?.length ?? 0,
         transferred: transferredEvents?.length ?? 0,
         dailySold: dailyByDealer.get(d.id)?.count ?? 0,
@@ -287,6 +288,8 @@ async function loadMarketOverviewLegacy(
     captures: new Map(),
     excludedDealers: [],
     monitoredDealerCount: dealerList.length,
+    soldUnits: { byDealer: new Map(), estimated: null, estimatedDealerIds: [], monthStart: monthStartStr, through: pacificDateStr(now) },
+    includesEstimatedSales: false,
     canonicalCutoff,
     activeDealersToday,
     totalInventory,
@@ -350,7 +353,7 @@ async function bothLoaders(tables: FakeTables) {
   const dbOld = new FakePostgrest(structuredClone(tables));
   const dbNew = new FakePostgrest(structuredClone(tables));
   const oldOut = await loadMarketOverviewLegacy(dbOld, NOW);
-  const newOut = await loadMarketOverview(dbNew, NOW);
+  const newOut = await loadMarketOverview(dbNew, NOW, "current_recent", []);
   return { oldOut, newOut, oldCount: dbOld.queryCount, newCount: dbNew.queryCount };
 }
 

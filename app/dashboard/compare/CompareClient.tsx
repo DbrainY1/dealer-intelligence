@@ -18,6 +18,8 @@ export interface DealerStat {
   name: string;
   inStock: number;
   mtdSold: number;
+  /** Whether mtdSold is a verified count or a feed-derived estimate. */
+  soldBasis?: "verified" | "estimated";
   sellThrough: number;
   daysOfSupply: number | null;
   avgYear: number | null;
@@ -27,7 +29,7 @@ export interface DealerStat {
 }
 
 type ExtendedStat = DealerStat & { ppi: number | null };
-type SortKey = Exclude<keyof ExtendedStat, "id">;
+type SortKey = Exclude<keyof ExtendedStat, "id" | "soldBasis">;
 
 interface ColDef {
   key: SortKey;
@@ -97,7 +99,7 @@ function formatCell(key: SortKey, stat: ExtendedStat): string {
   switch (key) {
     case "name":         return stat.name;
     case "inStock":      return stat.inStock.toLocaleString();
-    case "mtdSold":      return stat.mtdSold.toLocaleString();
+    case "mtdSold":      return stat.mtdSold.toLocaleString() + (stat.soldBasis === "estimated" ? " est" : "");
     case "sellThrough":  return `${stat.sellThrough.toFixed(1)}%`;
     case "daysOfSupply": return stat.daysOfSupply != null ? String(stat.daysOfSupply) : "∞";
     case "avgYear":      return stat.avgYear != null ? String(stat.avgYear) : "N/A";

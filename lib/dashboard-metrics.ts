@@ -40,6 +40,8 @@ export interface DealerRow {
   name: string;
   count: number;
   sold: number;
+  /** Whether `sold` is a verified count or an estimate. */
+  soldBasis: "verified" | "estimated";
   added: number;
   transferred: number;
   dailySold: number;
@@ -127,8 +129,8 @@ export function groupDailySoldByDealer(
 export function buildDealerRows(
   dealers: { id: number; name: string }[],
   inventoryByDealer: Map<number, number>,
-  monthlySales: MonthlySalesRow[],
-  monthStart: string,
+  /** Units per dealer from lib/sold-units — verified or estimated. */
+  soldByDealer: Map<number, { units: number | null; basis: "verified" | "estimated" }>,
   addedByDealer: Map<number, number>,
   transferredByDealer: Map<number, number>,
   dailyByDealer: Map<number, { count: number; vehicles: DailySoldVehicle[] }>
@@ -138,17 +140,16 @@ export function buildDealerRows(
     const dailySoldVehicles = dailyByDealer.get(d.id)?.vehicles ?? [];
 
     if (!inventoryByDealer.has(d.id)) {
-      return { name: d.name, count: 0, sold: 0, added: 0, transferred: 0, dailySold, dailySoldVehicles };
+      return { name: d.name, count: 0, sold: 0, soldBasis: "verified", added: 0, transferred: 0, dailySold, dailySoldVehicles };
     }
 
-    const soldRow = monthlySales.find(
-      (r) => r.dealer_id === d.id && r.month_start === monthStart
-    );
+    const soldRow = soldByDealer.get(d.id);
 
     return {
       name: d.name,
       count: inventoryByDealer.get(d.id) ?? 0,
-      sold: soldRow?.units_sold ?? 0,
+      sold: soldRow?.units ?? 0,
+      soldBasis: soldRow?.basis ?? "verified",
       added: addedByDealer.get(d.id) ?? 0,
       transferred: transferredByDealer.get(d.id) ?? 0,
       dailySold,

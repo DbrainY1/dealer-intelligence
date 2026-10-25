@@ -28,6 +28,7 @@ interface DealerRow {
   name: string;
   count: number;
   sold: number;
+  soldBasis?: "verified" | "estimated";
   added: number;
   transferred: number;
   dailySold: number;
@@ -112,7 +113,17 @@ export default function MarketCharts({ byDealer, dealers, soldColumnLabel, veloc
                       {d.dailySold}
                       {d.dailySold > 0 && <span className="ml-1 text-xs">{isExpanded ? "▾" : "▸"}</span>}
                     </td>
-                    <td className="px-4 py-3">{d.sold}</td>
+                    <td className="px-4 py-3">
+                      {d.sold}
+                      {d.soldBasis === "estimated" && (
+                        <span
+                          className="ml-1 text-[10px] uppercase tracking-wide text-amber-400"
+                          title="Estimated from inventory-feed departures — not a verified sale"
+                        >
+                          est
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-green-400">{d.added}</td>
                     <td className="px-4 py-3 text-yellow-400">{d.transferred}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">→</td>

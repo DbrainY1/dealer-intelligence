@@ -5,6 +5,7 @@ import InventoryTable from "@/components/InventoryTable";
 import TrendChart from "@/components/TrendChart";
 import VehicleEventList from "@/components/VehicleEventList";
 import type { Dealer, InventorySnapshot, Vehicle, InventoryEvent } from "@/types";
+import { loadSoldUnits } from "@/lib/sold-units";
 import { isCanonicalRow, cutoffLabel, cutoffPace, canonicalSoldEvents } from "@/lib/cutoff";
 
 interface PageProps {
@@ -120,7 +121,13 @@ export default async function DealerPage({ params }: PageProps) {
     .gte("event_date", yearStart)
     .order("event_date", { ascending: false });
 
-  const mtdUnits = soldMTD.length;
+  // Feed dealers (HomeNet) produce no canonical sold event by design, so the
+  // event-derived count is structurally 0. Substitute the shared estimate and
+  // label it; verified dealers are untouched.
+  const soldUnits = await loadSoldUnits(db, [Number(dealerId)], new Date());
+  const soldBasis = soldUnits.byDealer.get(Number(dealerId))?.basis ?? "verified";
+  const estimatedUnits = soldUnits.byDealer.get(Number(dealerId))?.units ?? 0;
+  const mtdUnits = soldBasis === "estimated" ? estimatedUnits : soldMTD.length;
   const ytdUnits = soldYTD?.length ?? 0;
 
   const mtdRevenue = soldMTD.reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
@@ -231,7 +238,7 @@ export default async function DealerPage({ params }: PageProps) {
 
       {/* Summary Bar */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
-        <SummaryRow label={mtdLabel} units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
+        <SummaryRow label={soldBasis === "estimated" ? `${mtdLabel} (est.)` : mtdLabel} units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
         <div className="border-t border-gray-800" />
         <SummaryRow label="YTD" units={ytdUnits} pace={ytdPace} avg={ytdAvg} total={ytdRevenue} />
       </div>

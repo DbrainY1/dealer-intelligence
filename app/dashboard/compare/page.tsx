@@ -6,6 +6,7 @@ import CompareClient from "./CompareClient";
 import type { Dealer, InventorySnapshot } from "@/types";
 import type { DealerStat } from "./CompareClient";
 import { isCanonicalRow, cutoffLabel, cutoffDaysOfSupply } from "@/lib/cutoff";
+import { loadSoldUnits } from "@/lib/sold-units";
 
 interface MonthlySalesRow {
   dealer_id: number;
@@ -63,9 +64,10 @@ export default async function ComparePage() {
     .select("dealer_id, units_sold, computed_by, projection_cutoff")
     .eq("month_start", monthStart.toISOString().split("T")[0])
     .in("dealer_id", dealerIds);
-  const soldByDealer = new Map(
-    (monthlySales ?? []).map((r: MonthlySalesRow) => [r.dealer_id, r.units_sold ?? 0])
-  );
+  // Shared provider — verified counts plus feed-dealer estimates.
+  const soldUnits = await loadSoldUnits(supabase, dealerIds, new Date());
+  const soldByDealer = new Map<number, number>();
+  for (const [id, s] of soldUnits.byDealer) if (s.units !== null) soldByDealer.set(id, s.units);
   // Canonical partial-month cutoff (shared across all rows this month; NULL for
   // legacy). Derived from projection_cutoff — never hardcoded.
   const canonicalCutoff =
@@ -112,7 +114,7 @@ export default async function ComparePage() {
       ? Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length)
       : null;
 
-    return { id: d.id, name: d.name, inStock, mtdSold, sellThrough, daysOfSupply, avgYear, avgMiles, avgListPrice, totalValue };
+    return { id: d.id, name: d.name, inStock, mtdSold, soldBasis: soldUnits.byDealer.get(d.id)?.basis ?? "verified", sellThrough, daysOfSupply, avgYear, avgMiles, avgListPrice, totalValue };
   });
 
   // Fetch last 30 days trend data per dealer for the chart

@@ -26,6 +26,25 @@ import { CANONICAL_COMPUTED_BY } from "./cutoff.ts";
 import type { InventoryEvent } from "../types/index.ts";
 
 const MONTH = "2026-10-01";
+
+/** Verified sold-units map, as lib/sold-units produces for scraper dealers. */
+function verified(m: Record<number, number | null>) {
+  return new Map(
+    Object.entries(m).map(([id, units]) => [
+      Number(id),
+      { units, basis: "verified" as const },
+    ]),
+  );
+}
+/** Estimated sold-units map, as lib/sold-units produces for feed dealers. */
+function estimated(m: Record<number, number>) {
+  return new Map(
+    Object.entries(m).map(([id, units]) => [
+      Number(id),
+      { units, basis: "estimated" as const },
+    ]),
+  );
+}
 const PRIOR = "2026-09-01";
 
 function ms(p: Partial<MonthlySalesRow> & { dealer_id: number }): MonthlySalesRow {
@@ -174,8 +193,7 @@ test("buildDealerRows assembles counts, sold, added and transferred", () => {
   const rows = buildDealerRows(
     DEALERS,
     new Map([[1, 42], [2, 7]]),
-    [ms({ dealer_id: 1, units_sold: 9 }), ms({ dealer_id: 2, units_sold: 3 })],
-    MONTH,
+    verified({ 1: 9, 2: 3 }),
     new Map([[1, 5]]),
     new Map([[2, 2]]),
     new Map()
@@ -192,8 +210,7 @@ test("REGRESSION: a dealer with no snapshot reports sold 0 even when monthly_sal
   const rows = buildDealerRows(
     DEALERS,
     new Map([[1, 10]]), // Beta has no snapshot
-    [ms({ dealer_id: 2, units_sold: 25 })],
-    MONTH,
+    verified({ 2: 25 }),
     new Map([[2, 4]]),
     new Map([[2, 4]]),
     new Map()
@@ -208,7 +225,7 @@ test("REGRESSION: a dealer with no snapshot reports sold 0 even when monthly_sal
 test("buildDealerRows still reports dailySold for a dealer with no snapshot", () => {
   // dailySold was computed before the early return, so it survives it.
   const daily = new Map([[2, { count: 3, vehicles: [] }]]);
-  const rows = buildDealerRows(DEALERS, new Map([[1, 10]]), [], MONTH, new Map(), new Map(), daily);
+  const rows = buildDealerRows(DEALERS, new Map([[1, 10]]), verified({}), new Map(), new Map(), daily);
   const beta = rows.find((r) => r.name === "Beta")!;
   assert.equal(beta.count, 0);
   assert.equal(beta.dailySold, 3);
@@ -220,8 +237,7 @@ test("buildDealerRows treats a zero-count snapshot dealer as present", () => {
   const rows = buildDealerRows(
     [{ id: 1, name: "Alpha" }],
     new Map([[1, 0]]),
-    [ms({ dealer_id: 1, units_sold: 12 })],
-    MONTH,
+    verified({ 1: 12 }),
     new Map(),
     new Map(),
     new Map()
@@ -230,25 +246,34 @@ test("buildDealerRows treats a zero-count snapshot dealer as present", () => {
   assert.equal(rows[0].sold, 12);
 });
 
-test("buildDealerRows matches monthly_sales on dealer_id AND month", () => {
+test("buildDealerRows carries the sold basis through to the row", () => {
+  // Month scoping now happens in lib/sold-units (its query filters
+  // month_start), so this function just consumes whatever units it is given
+  // and records whether they were verified or estimated.
   const rows = buildDealerRows(
-    [{ id: 1, name: "Alpha" }],
-    new Map([[1, 5]]),
-    [ms({ dealer_id: 1, units_sold: 99, month_start: PRIOR })],
-    MONTH,
+    [{ id: 1, name: "Scraper" }, { id: 2, name: "Feed" }],
+    new Map([[1, 5], [2, 9]]),
+    new Map<number, { units: number | null; basis: "verified" | "estimated" }>([
+      ...verified({ 1: 7 }),
+      ...estimated({ 2: 24 }),
+    ]),
     new Map(),
     new Map(),
     new Map()
   );
-  assert.equal(rows[0].sold, 0, "a prior-month row must not leak into this month");
+  const scraper = rows.find((r) => r.name === "Scraper")!;
+  const feed = rows.find((r) => r.name === "Feed")!;
+  assert.equal(scraper.sold, 7);
+  assert.equal(scraper.soldBasis, "verified");
+  assert.equal(feed.sold, 24);
+  assert.equal(feed.soldBasis, "estimated", "feed dealers are flagged as estimates");
 });
 
 test("buildDealerRows treats a null units_sold as 0", () => {
   const rows = buildDealerRows(
     [{ id: 1, name: "Alpha" }],
     new Map([[1, 5]]),
-    [ms({ dealer_id: 1, units_sold: null })],
-    MONTH,
+    verified({ 1: null }),
     new Map(),
     new Map(),
     new Map()
@@ -358,8 +383,7 @@ test("countActiveDealers counts only dealers with inventory", () => {
   const rows = buildDealerRows(
     [{ id: 1, name: "A" }, { id: 2, name: "B" }, { id: 3, name: "C" }],
     new Map([[1, 5], [2, 0]]),
-    [],
-    MONTH,
+    verified({}),
     new Map(),
     new Map(),
     new Map()
