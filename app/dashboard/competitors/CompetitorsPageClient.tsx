@@ -26,6 +26,8 @@ interface Props {
   soldLabel?: string;
   /** Server-rendered freshness scope control, placed inside the page layout. */
   scopeBar?: React.ReactNode;
+  /** Server-rendered Estimated Departures panel for dealer-supplied feeds. */
+  estimatedDepartures?: React.ReactNode;
 }
 
 export default function CompetitorsPageClient({
@@ -37,6 +39,7 @@ export default function CompetitorsPageClient({
   vehicleMap = {},
   soldLabel,
   scopeBar,
+  estimatedDepartures,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(scorecards.map((s) => s.id))
@@ -62,6 +65,8 @@ export default function CompetitorsPageClient({
       {scopeBar}
 
       <MarketPulseCards scorecards={scorecards} onSelectionChange={setSelectedIds} soldLabel={soldLabel} />
+
+      {estimatedDepartures}
 
       {/* 90-day trend chart — filtered by selection */}
       <CompetitorCharts dealers={selectedDealers} snapshots={filteredSnapshots} />

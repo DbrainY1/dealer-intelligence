@@ -11,6 +11,8 @@ import { resolveDealerCaptures } from "@/lib/dealer-freshness";
 import { loadPriceTrends } from "@/lib/price-trend";
 import { pacificDateStr } from "@/lib/dates";
 import MarketScopeBar from "@/components/MarketScopeBar";
+import EstimatedDeparturesPanel from "@/components/EstimatedDeparturesPanel";
+import { loadEstimatedDepartures, HOMENET_FEED } from "@/lib/estimated-departures-data";
 import type { Dealer, InventorySnapshot, InventoryEvent } from "@/types";
 
 interface MonthlySalesRow {
@@ -224,6 +226,15 @@ export default async function CompetitorsPage({
   // each PriceSparkline used to fire from the browser on mount.
   const priceTrends = await loadPriceTrends(supabase, dealerIds, todayPacific);
 
+  // Estimated Departures for dealer-supplied feeds. Recomputed from the
+  // validated daily feeds on every render — no job, no table, no write — so a
+  // newly captured day shows up automatically. Reported entirely separately
+  // from canonical sold / monthly_sales, which are untouched.
+  const departures = await loadEstimatedDepartures(supabase, HOMENET_FEED);
+  const feedDealerNames: Record<number, string> = {};
+  for (const d of monitoredDealers)
+    if (HOMENET_FEED.dealerIds.includes(d.id)) feedDealerNames[d.id] = d.name;
+
   const scorecards = await Promise.all(dealers.map(async (d) => {
     const { data: latest } = await supabase
       .from("inventory_snapshots")
@@ -323,6 +334,13 @@ export default async function CompetitorsPage({
         estimatedSales={estimatedSales}
         vehicleMap={Object.fromEntries(vehicleMap)}
         soldLabel={soldLabel}
+        estimatedDepartures={
+          <EstimatedDeparturesPanel
+            report={departures}
+            dealerNames={feedDealerNames}
+            groupLabel={HOMENET_FEED.label}
+          />
+        }
       />
     </RoleGuard>
   );
