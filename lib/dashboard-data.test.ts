@@ -472,6 +472,31 @@ test("DIVERGENCE: a 23-day-old capture is excluded from the market, not counted"
   assert.equal(newOut.monitoredDealerCount, 2, "full monitored roster still reported");
 });
 
+test("sell-through divides cohort sales by cohort inventory, not roster sales", async () => {
+  // Fresh dealer: 2 units, 1 sale. Historic dealer: 50 sales, no current
+  // inventory. If the numerator summed the whole roster the rate would be
+  // (1+50)/2 = 2550%; it must be 1/2 = 50%.
+  const tables = build({
+    dealers: [{ id: 1, name: "Fresh" }, { id: 2, name: "Gone" }],
+    snapshots: {
+      1: [["2026-10-24", 20000], ["2026-10-24", 22000]],
+      2: [["2026-06-01", 9000]],
+    },
+    monthlySales: [
+      { dealer_id: 1, units_sold: 1, month_start: MONTH_START },
+      { dealer_id: 2, units_sold: 50, month_start: MONTH_START },
+    ],
+  });
+  const { newOut } = await bothLoaders(tables);
+
+  assert.equal(newOut.totalInventory, 2, "denominator is cohort-only");
+  assert.equal(
+    newOut.sellThroughToday,
+    50,
+    "numerator must exclude the out-of-scope dealer's 50 sales"
+  );
+});
+
 test("Stale (8–14 days) is excluded from the market but keeps a visible LCD", async () => {
   const tables = build({
     dealers: [{ id: 1, name: "Current" }, { id: 2, name: "TenDays" }],

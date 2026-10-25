@@ -265,7 +265,9 @@ export async function loadMarketOverview(
   // Derived from projection_cutoff — never hardcoded.
   const canonicalCutoff = deriveCanonicalCutoff(allMonthlySales, monthStartStr);
 
-  const soldThisMonth = sumSoldForMonth(allMonthlySales, monthStartStr);
+  // Comparison-period sums stay whole-market: their denominators
+  // (lastMoStats / lastYrStats) are whole-market counts on those historical
+  // dates, so both sides of those ratios already describe the same population.
   const soldLastMo = sumSoldForMonth(allMonthlySales, lastMoMonthStartStr);
   const soldLastYr = sumSoldForMonth(allMonthlySales, lastYrMonthStartStr);
 
@@ -329,6 +331,15 @@ export async function loadMarketOverview(
 
   // The dealers the page lists. Identical to the set the totals come from.
   const cohortDealers = dealerList.filter((d) => captures.get(d.id)?.inScope === true);
+
+  // Current-period sell-through must divide the cohort's sales by the cohort's
+  // inventory. Summing sales across the whole roster while the denominator
+  // covers only in-scope dealers would inflate the rate.
+  const cohortIds = new Set(cohortDealers.map((d) => d.id));
+  const soldThisMonth = sumSoldForMonth(
+    allMonthlySales.filter((r) => cohortIds.has(r.dealer_id)),
+    monthStartStr
+  );
 
   const excludedDealers: ExcludedDealer[] = dealerList
     .filter((d) => captures.get(d.id)?.inScope !== true)
