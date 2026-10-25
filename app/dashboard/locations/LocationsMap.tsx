@@ -153,6 +153,8 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
   const layerGroupsRef  = useRef<Record<string, any>>({});
   const dealerDataRef   = useRef(dealerData);
   const [activeLayers, setActiveLayers] = useState<Set<LayerId>>(new Set());
+  /** True while CARTO is rejecting tile requests — see the tileerror handler. */
+  const [tileError, setTileError] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || mapInstance.current) return;
@@ -171,13 +173,36 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
       mapInstance.current = map;
 
       if (CARTO_API_KEY) {
-        L.tileLayer(
-          `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_API_KEY)}`,
+        // CARTO documents exactly one keyed raster form:
+        //   https://basemaps.cartocdn.com/rastertiles/<style>/{z}/{x}/{y}.png?key=…
+        // The previous URL used the legacy `/light_all/` path on the {s}
+        // subdomains, which is not documented for keyed access.
+        const layer = L.tileLayer(
+          `https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_API_KEY)}`,
           {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
             maxZoom: 19,
           },
-        ).addTo(map);
+        );
+
+        // A rejected key fails silently: CARTO answers 403 for a key whose
+        // domain restrictions do not list the requesting origin, Leaflet drops
+        // the tile, and the map renders as a blank grey panel with the
+        // attribution still showing. Surface that instead.
+        //
+        // Only report when NO tile has ever loaded — a fully rejected basemap
+        // raises tileerror for every tile and never tileload, while one flaky
+        // tile on an otherwise healthy map must not flash a warning.
+        const anyTileLoaded = { current: false };
+        layer.on("tileload", () => {
+          anyTileLoaded.current = true;
+          setTileError(false);
+        });
+        layer.on("tileerror", () => {
+          if (!anyTileLoaded.current) setTileError(true);
+        });
+
+        layer.addTo(map);
       } else {
         console.warn(
           "[LocationsMap] NEXT_PUBLIC_CARTO_API_KEY is not set — the CARTO basemap is disabled. " +
@@ -419,6 +444,20 @@ export default function LocationsMap({ dealerData, velocityTitle }: Props) {
           >
             Basemap disabled — <span className="font-mono">NEXT_PUBLIC_CARTO_API_KEY</span> is not set.
             Dealer pins and intelligence layers are unaffected.
+          </div>
+        )}
+
+        {/* Tile rejection — a key is present but CARTO refused the requests.
+            Without this the map is an unexplained blank panel. */}
+        {CARTO_API_KEY && tileError && (
+          <div
+            style={{ position: "absolute", top: "12px", left: "50%", transform: "translateX(-50%)", zIndex: 1000 }}
+            className="bg-amber-950 border border-amber-700 text-amber-200 rounded-lg px-4 py-2 text-xs max-w-md text-center"
+          >
+            Basemap tiles rejected by CARTO. The key is set, so this is usually a
+            domain restriction that does not list this site, or an invalid or
+            over-quota key. Check the browser network tab for the tile response
+            status. Dealer pins and intelligence layers are unaffected.
           </div>
         )}
 
