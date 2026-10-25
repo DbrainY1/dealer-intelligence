@@ -28,7 +28,7 @@ export default function EstimatedDeparturesPanel({
   dealerNames: Record<number, string>;
   groupLabel: string;
 }) {
-  const { perDealer, totals, windowStart, windowEnd, confirmationDays } = report;
+  const { perDealer, totals, group, windowStart, windowEnd, confirmationDays } = report;
   if (perDealer.length === 0) return null;
 
   const range = fmtRange(windowStart, windowEnd);
@@ -44,6 +44,43 @@ export default function EstimatedDeparturesPanel({
         <span className="text-[11px] uppercase tracking-widest font-mono text-amber-300/80 border border-amber-700/50 rounded px-2 py-0.5">
           Estimate · not verified sales
         </span>
+      </div>
+
+      {/* PRIMARY: unique VINs gone from the whole group */}
+      <div className="bg-gray-950/60 border border-gray-800 rounded-lg p-4 flex flex-wrap items-end gap-x-8 gap-y-3">
+        <div>
+          <p className="text-gray-500 text-xs font-mono uppercase tracking-widest">
+            {groupLabel} — group total
+          </p>
+          <p className="text-amber-300 text-4xl font-bold leading-tight">
+            {group.estimatedDepartures}
+          </p>
+          <p className="text-gray-500 text-xs">
+            unique vehicles that left the group · {group.confirmedDated} dated ·{" "}
+            {group.confirmedUndated} date unknown
+          </p>
+        </div>
+        <div className="text-xs text-gray-400 space-y-0.5">
+          <p>
+            Store figures sum to{" "}
+            <span className="text-gray-200 font-semibold">{group.perDealerSum}</span>
+            {group.crossStoreDuplicatesRemoved !== 0 && (
+              <>
+                {" "}
+                · <span className="text-gray-200 font-semibold">
+                  {group.crossStoreDuplicatesRemoved}
+                </span>{" "}
+                removed as cross-store duplicate
+                {group.crossStoreDuplicatesRemoved === 1 ? "" : "s"}
+              </>
+            )}
+          </p>
+          <p>{group.pendingConfirmation} pending confirmation · {group.retained} still in group inventory</p>
+          <p className="text-gray-600">
+            Group evidence uses the {group.groupValidDays} day
+            {group.groupValidDays === 1 ? "" : "s"} on which every store captured.
+          </p>
+        </div>
       </div>
 
       <p className="text-xs text-gray-400">
@@ -66,12 +103,21 @@ export default function EstimatedDeparturesPanel({
         </div>
       )}
 
+      <div className="space-y-1">
+        <p className="text-gray-300 text-xs font-semibold">By inventory-origin store</p>
+        <p className="text-[11px] text-gray-500">
+          Where each vehicle was last held before it left — <span className="text-gray-400">not</span>{" "}
+          the selling store, and not a sale. A vehicle listed at two stores appears in both rows,
+          which is why these figures sum to more than the group total.
+        </p>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left text-gray-300">
           <thead className="text-xs text-gray-400 uppercase bg-gray-800">
             <tr>
               <th className="px-3 py-2">Dealer</th>
-              <th className="px-3 py-2 text-right">Estimated departures</th>
+              <th className="px-3 py-2 text-right">Origin departures</th>
               <th className="px-3 py-2 text-right">Dated</th>
               <th className="px-3 py-2 text-right">Date unknown</th>
               <th className="px-3 py-2 text-right">Pending &lt;{confirmationDays * 24}h</th>
@@ -106,7 +152,7 @@ export default function EstimatedDeparturesPanel({
               </tr>
             ))}
             <tr className="bg-gray-800/60 font-semibold">
-              <td className="px-3 py-2 text-white">Total</td>
+              <td className="px-3 py-2 text-white">Sum of stores</td>
               <td className="px-3 py-2 text-right text-amber-300">{totals.estimatedDepartures}</td>
               <td className="px-3 py-2 text-right">{totals.confirmedDated}</td>
               <td className="px-3 py-2 text-right">{totals.confirmedUndated}</td>

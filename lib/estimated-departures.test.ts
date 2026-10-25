@@ -250,3 +250,102 @@ test("an empty window produces zeros, not errors", () => {
   assert.equal(r.perDealer.length, 3);
   assert.equal(r.perDealer[0].coverage.presentDays, 0);
 });
+
+// ── group roll-up: unique VINs, no cross-store double counting ───────────────
+
+test("CROSS-STORE: a VIN listed at two stores at once is counted once for the group", () => {
+  // VIN 500 sits at BOTH dealer 1 and dealer 2 for the same dates, then
+  // vanishes from both. Each store legitimately reports an inventory-origin
+  // departure, so the per-dealer sum is 2 — but only one vehicle left.
+  const upTo = ALL.filter((d) => d <= "2026-10-15");
+  const r = run(rows({ 1: { 500: upTo }, 2: { 500: upTo } }));
+
+  assert.equal(r.totals.estimatedDepartures, 2, "per-dealer sum double-counts by design");
+  assert.equal(r.group.estimatedDepartures, 1, "the group counts the VIN once");
+  assert.equal(r.group.perDealerSum, 2);
+  assert.equal(r.group.crossStoreDuplicatesRemoved, 1);
+});
+
+test("CROSS-STORE: a transfer between stores is not a group departure at all", () => {
+  const r = run(
+    rows({
+      1: { 600: ALL.filter((d) => d <= "2026-10-10") },
+      2: { 600: ALL.filter((d) => d >= "2026-10-11") },
+    }),
+  );
+  assert.equal(r.totals.estimatedDepartures, 0, "excluded as a transfer at the origin store");
+  assert.equal(r.group.estimatedDepartures, 0, "and the vehicle never left the group");
+  assert.equal(r.group.retained > 0, true);
+});
+
+test("CROSS-STORE: a VIN that transfers then leaves counts exactly once", () => {
+  const r = run(
+    rows({
+      1: { 700: ALL.filter((d) => d <= "2026-10-10") },
+      2: { 700: ALL.filter((d) => d >= "2026-10-11" && d <= "2026-10-18") },
+    }),
+  );
+  assert.equal(r.totals.estimatedDepartures, 1, "counted only at the store it left from");
+  assert.equal(r.group.estimatedDepartures, 1, "and once for the group");
+  assert.equal(r.group.crossStoreDuplicatesRemoved, 0);
+});
+
+test("CROSS-STORE: independent departures at different stores both count", () => {
+  const r = run(
+    rows({
+      1: { 800: ALL.filter((d) => d <= "2026-10-12") },
+      2: { 810: ALL.filter((d) => d <= "2026-10-14") },
+      3: { 820: ALL.filter((d) => d <= "2026-10-16") },
+    }),
+  );
+  assert.equal(r.group.estimatedDepartures, 3, "three distinct vehicles left the group");
+  assert.equal(r.group.perDealerSum, 3);
+  assert.equal(r.group.crossStoreDuplicatesRemoved, 0);
+});
+
+test("group evidence uses only days when EVERY store captured", () => {
+  // Dealer 3 is dark from 10-20 onward, so 10-21..25 are not group-complete.
+  const d3days = ALL.filter((d) => d <= "2026-10-20");
+  const r = run([
+    ...bareRows({ 1: { [FILLER]: ALL }, 2: { [FILLER]: ALL } }),
+    ...bareRows({ 3: { [FILLER]: d3days } }),
+  ]);
+  assert.equal(r.group.groupValidDays, 20, "10-01..10-20 only");
+  assert.equal(r.group.coverage.complete, false);
+});
+
+test("a store with no data at all does not block group evidence", () => {
+  const r = run(bareRows({ 1: { [FILLER]: ALL, 900: ALL.filter((d) => d <= "2026-10-10") } }));
+  assert.equal(r.group.groupValidDays, 25, "dealers 2 and 3 never participated");
+  assert.equal(r.group.estimatedDepartures, 1);
+});
+
+test("group departures are not dated across the blackout", () => {
+  const r = run(rows({ 1: { 950: ["2026-10-01", "2026-10-02", "2026-10-03"] } }, VALID));
+  assert.equal(r.group.estimatedDepartures, 1);
+  assert.equal(r.group.confirmedUndated, 1, "vanished into the gap — no date asserted");
+  assert.equal(r.group.confirmedDated, 0);
+});
+
+test("group honours the 72-hour rule", () => {
+  const r = run(rows({ 1: { 960: ALL.filter((d) => d <= "2026-10-23") } }));
+  assert.equal(r.group.estimatedDepartures, 0, "only 2 group-valid days of absence");
+  assert.equal(r.group.pendingConfirmation, 1);
+});
+
+test("group total never exceeds the per-dealer sum", () => {
+  const r = run(
+    rows({
+      1: { 970: ALL.filter((d) => d <= "2026-10-11"), 971: ALL.filter((d) => d <= "2026-10-12") },
+      2: { 970: ALL.filter((d) => d <= "2026-10-11") },
+      3: { 972: ALL.filter((d) => d <= "2026-10-13") },
+    }),
+  );
+  assert.ok(
+    r.group.estimatedDepartures <= r.group.perDealerSum,
+    "de-duplication can only remove, never add",
+  );
+  assert.equal(r.group.estimatedDepartures, 3, "970 once, plus 971 and 972");
+  assert.equal(r.group.perDealerSum, 4);
+  assert.equal(r.group.crossStoreDuplicatesRemoved, 1);
+});

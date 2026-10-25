@@ -87,10 +87,41 @@ export interface DealerDepartures {
   retained: number;
 }
 
+/**
+ * Group-level roll-up: unique VINs that left the feed group entirely.
+ *
+ * The per-dealer figures answer "where was this vehicle last held", so summing
+ * them can count one VIN twice if it was listed at two stores at once. The
+ * group figure counts each VIN once, treating the group as a single lot: a VIN
+ * has departed only when it is absent from EVERY member store.
+ *
+ * Evidence is restricted to group-complete days — days on which every
+ * participating store captured. A day where one store is dark cannot prove a
+ * vehicle left the group, only that one store went quiet.
+ */
+export interface GroupDepartures {
+  dealerIds: number[];
+  /** Days on which every participating store captured. */
+  groupValidDays: number;
+  coverage: FeedCoverage;
+  /** Unique VINs confirmed gone from the whole group — the headline figure. */
+  estimatedDepartures: number;
+  confirmedDated: number;
+  confirmedUndated: number;
+  pendingConfirmation: number;
+  retained: number;
+  ofWhichArrivedMidWindow: number;
+  /** Sum of the per-dealer figures, before de-duplication. */
+  perDealerSum: number;
+  /** perDealerSum − estimatedDepartures: VINs that would have been counted twice. */
+  crossStoreDuplicatesRemoved: number;
+}
+
 export interface DepartureReport {
   windowStart: string;
   windowEnd: string;
   confirmationDays: number;
+  group: GroupDepartures;
   perDealer: DealerDepartures[];
   totals: {
     estimatedDepartures: number;
@@ -290,6 +321,69 @@ export function computeEstimatedDepartures(
     perDealer.push(result);
   }
 
+  // ── Group roll-up: unique VINs gone from every member store ───────────────
+  //
+  // Only stores that produced data in the window participate; a store with no
+  // rows at all cannot constrain the group's evidence.
+  const participating = opts.feedDealerIds.filter(
+    (id) => (byDealer.get(id)?.size ?? 0) > 0,
+  );
+
+  const groupValidDays = expected.filter((d) =>
+    participating.every((id) => (byDealer.get(id)?.get(d)?.size ?? 0) > 0),
+  );
+  const groupValidSet = new Set(groupValidDays);
+  const groupCoverage = buildCoverage(groupValidSet, expected);
+
+  const groupLastSeen = new Map<number, string>();
+  const groupFirstSeen = new Map<number, string>();
+  for (const day of groupValidDays) {
+    for (const vin of groupByDate.get(day) ?? []) {
+      if (!groupFirstSeen.has(vin)) groupFirstSeen.set(vin, day);
+      groupLastSeen.set(vin, day);
+    }
+  }
+
+  const perDealerSum = perDealer.reduce((a, d) => a + d.estimatedDepartures, 0);
+  const group: GroupDepartures = {
+    dealerIds: opts.feedDealerIds,
+    groupValidDays: groupValidDays.length,
+    coverage: groupCoverage,
+    estimatedDepartures: 0,
+    confirmedDated: 0,
+    confirmedUndated: 0,
+    pendingConfirmation: 0,
+    retained: 0,
+    ofWhichArrivedMidWindow: 0,
+    perDealerSum,
+    crossStoreDuplicatesRemoved: 0,
+  };
+
+  if (groupValidDays.length > 0) {
+    const finalGroupDay = groupValidDays[groupValidDays.length - 1];
+    const stillHere = groupByDate.get(finalGroupDay) ?? new Set<number>();
+
+    for (const [vin, last] of groupLastSeen) {
+      if (stillHere.has(vin)) {
+        group.retained += 1;
+        continue;
+      }
+      const validDaysAfter = groupValidDays.filter((d) => d > last).length;
+      const elapsedDays = dateRange(last, opts.windowEnd).length - 1;
+
+      if (validDaysAfter >= confirmationDays && elapsedDays >= confirmationDays) {
+        if (groupValidSet.has(shiftDate(last, 1))) group.confirmedDated += 1;
+        else group.confirmedUndated += 1;
+        if (groupFirstSeen.get(vin)! > opts.windowStart) group.ofWhichArrivedMidWindow += 1;
+      } else {
+        group.pendingConfirmation += 1;
+      }
+    }
+  }
+
+  group.estimatedDepartures = group.confirmedDated + group.confirmedUndated;
+  group.crossStoreDuplicatesRemoved = perDealerSum - group.estimatedDepartures;
+
   const totals = perDealer.reduce(
     (a, d) => ({
       estimatedDepartures: a.estimatedDepartures + d.estimatedDepartures,
@@ -313,6 +407,7 @@ export function computeEstimatedDepartures(
     windowStart: opts.windowStart,
     windowEnd: opts.windowEnd,
     confirmationDays,
+    group,
     perDealer,
     totals,
     feedFailures: perDealer
