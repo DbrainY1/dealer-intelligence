@@ -253,7 +253,7 @@ test("buildDealerRows carries the sold basis through to the row", () => {
   const rows = buildDealerRows(
     [{ id: 1, name: "Scraper" }, { id: 2, name: "Feed" }],
     new Map([[1, 5], [2, 9]]),
-    new Map<number, { units: number | null; basis: "verified" | "estimated" }>([
+    new Map<number, { units: number | null; basis: "verified" | "estimated" | "estimated_v2" }>([
       ...verified({ 1: 7 }),
       ...estimated({ 2: 24 }),
     ]),

@@ -423,3 +423,186 @@ test("the same methodology applies to a solo dealer with no group", () => {
   const x = r.perDealer.find((d) => d.dealerId === 3)!;
   assert.equal(x.confirmedEstimatedSales, 1, "platform-agnostic: no feed-group special case");
 });
+
+// ── Stage 3A: month attribution + cross-month evidence ──────────────────────
+
+const OCT = dateRange("2026-10-01", "2026-10-31");
+const NOV = dateRange("2026-11-01", "2026-11-30");
+
+/** Rows for one dealer across explicit capture days. */
+function solo(vinDays: Record<number, string[]>, captureDays: string[]): SalesSnapshotRow[] {
+  const out: SalesSnapshotRow[] = [];
+  for (const d of captureDays)
+    out.push({ dealer_id: 1, snapshot_date: d, vehicle_id: 9999, list_price: 1, created_at: at(d) });
+  for (const [v, days] of Object.entries(vinDays))
+    for (const d of days)
+      out.push({ dealer_id: 1, snapshot_date: d, vehicle_id: Number(v), list_price: 20000, created_at: at(d) });
+  return out;
+}
+const soloOpts = (over: Record<string, unknown>) => ({
+  dealerIds: [1],
+  groupByDealer: new Map<number, number | null>([[1, null]]),
+  ...over,
+}) as Parameters<typeof computeEstimatedSales>[1];
+
+test("ATTRIBUTION: a departure belongs to the month of its FIRST VERIFIED ABSENCE", () => {
+  // Last seen Sep 30, first absent Oct 1 → an OCTOBER departure, even though
+  // lastSeen is September and confirmation lands Oct 4.
+  const days = [...dateRange("2026-09-28", "2026-09-30"), ...OCT.slice(0, 10)];
+  const r = computeEstimatedSales(
+    solo({ 100: dateRange("2026-09-28", "2026-09-30") }, days),
+    soloOpts({
+      windowStart: "2026-09-28", windowEnd: "2026-10-10",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-10", today: "2026-10-10",
+    }),
+  );
+  const e = r.perDealer[0].episodes[0];
+  assert.equal(e.lastSeen, "2026-09-30", "the sighting is in September");
+  assert.equal(e.firstAbsentCapture, "2026-10-01");
+  assert.equal(e.reportingMonth, "2026-10", "but it is reported in October");
+  assert.equal(e.inReportingPeriod, true);
+  assert.equal(r.perDealer[0].confirmedEstimatedSales, 1);
+});
+
+test("ATTRIBUTION: a September absence is excluded from an October report", () => {
+  const days = dateRange("2026-09-20", "2026-10-10");
+  const r = computeEstimatedSales(
+    solo({ 100: dateRange("2026-09-20", "2026-09-22") }, days),
+    soloOpts({
+      windowStart: "2026-09-20", windowEnd: "2026-10-10",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-10", today: "2026-10-10",
+    }),
+  );
+  const e = r.perDealer[0].episodes[0];
+  assert.equal(e.reportingMonth, "2026-09");
+  assert.equal(e.inReportingPeriod, false);
+  assert.equal(r.perDealer[0].confirmedEstimatedSales, 0, "September does not leak into October");
+});
+
+test("CROSS-MONTH: a November return WITHIN 30 days unwinds the October sale", () => {
+  // Gone after Oct 20 (first absent Oct 21, confirmed Oct 24), back Nov 5 —
+  // 12 days after confirmation.
+  const present = [...OCT.filter((d) => d <= "2026-10-20"), ...NOV.filter((d) => d >= "2026-11-05")];
+  const days = [...OCT, ...NOV.filter((d) => d <= "2026-11-10")];
+  const r = computeEstimatedSales(
+    solo({ 100: present }, days),
+    soloOpts({
+      windowStart: "2026-10-01", windowEnd: "2026-11-10",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-11-10",
+    }),
+  );
+  const d = r.perDealer[0];
+  const e = d.episodes[0];
+  assert.equal(e.reportingMonth, "2026-10", "attributed to October");
+  assert.equal(e.status, "unwound");
+  assert.equal(e.returnedOn, "2026-11-05");
+  assert.equal(d.unwound, 1);
+  assert.equal(d.confirmedEstimatedSales, 0, "October's confirmed estimate is corrected down");
+});
+
+test("CROSS-MONTH: a November return BEYOND 30 days leaves October standing", () => {
+  const present = [...OCT.filter((d) => d <= "2026-10-20"), ...NOV.filter((d) => d >= "2026-11-28")];
+  const days = [...OCT, ...NOV];
+  const r = computeEstimatedSales(
+    solo({ 100: present }, days),
+    soloOpts({
+      windowStart: "2026-10-01", windowEnd: "2026-11-30",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-11-30",
+    }),
+  );
+  const d = r.perDealer[0];
+  assert.equal(d.unwound, 0, "35 days is outside the unwind window");
+  assert.equal(d.confirmedEstimatedSales, 1, "the October sale stands");
+});
+
+test("CROSS-MONTH: widening the evidence window does not duplicate an episode", () => {
+  const present = OCT.filter((d) => d <= "2026-10-10");
+  const narrow = computeEstimatedSales(
+    solo({ 100: present }, OCT),
+    soloOpts({ windowStart: "2026-10-01", windowEnd: "2026-10-31",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-10-31" }),
+  );
+  const wide = computeEstimatedSales(
+    solo({ 100: present }, [...OCT, ...NOV]),
+    soloOpts({ windowStart: "2026-10-01", windowEnd: "2026-11-30",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-11-30" }),
+  );
+  assert.equal(narrow.perDealer[0].confirmedEstimatedSales, 1);
+  assert.equal(wide.perDealer[0].confirmedEstimatedSales, 1, "still exactly one");
+  assert.deepEqual(
+    wide.perDealer[0].episodes.map((e) => e.key),
+    narrow.perDealer[0].episodes.map((e) => e.key),
+    "identical episode identity across both windows",
+  );
+});
+
+test("CROSS-MONTH: repeat episodes land in their own months", () => {
+  // Departs early Oct (confirmed), returns mid-Oct, departs again early Nov.
+  const present = [
+    ...OCT.filter((d) => d <= "2026-10-04"),
+    ...OCT.filter((d) => d >= "2026-10-15"),
+  ];
+  const days = [...OCT, ...NOV.filter((d) => d <= "2026-11-10")];
+  const all = computeEstimatedSales(
+    solo({ 100: present }, days),
+    soloOpts({ windowStart: "2026-10-01", windowEnd: "2026-11-10",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-11-10",
+      unwindWindowDays: 0 }),
+  );
+  const months = all.perDealer[0].episodes.map((e) => e.reportingMonth);
+  assert.deepEqual(months, ["2026-10", "2026-11"], "one episode per month");
+  assert.equal(all.perDealer[0].confirmedEstimatedSales, 1, "October reports only its own");
+});
+
+test("completeness measures the REPORTING period, not the wider evidence window", () => {
+  const days = [...OCT, ...NOV.filter((d) => d <= "2026-11-10")];
+  const r = computeEstimatedSales(
+    solo({ 100: OCT }, days),
+    soloOpts({ windowStart: "2026-10-01", windowEnd: "2026-11-10",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-11-10" }),
+  );
+  const c = r.perDealer[0].completeness;
+  assert.equal(c.expectedCaptures, 31, "October's 31 days, not the 41-day evidence span");
+  assert.equal(c.actualCaptures, 31);
+  assert.equal(c.status, "complete");
+});
+
+// ── Stage 3A: only verified captures may establish absence ──────────────────
+
+test("an unverified capture day cannot open a departure", () => {
+  const present = OCT.filter((d) => d <= "2026-10-10");
+  const opts = {
+    windowStart: "2026-10-01", windowEnd: "2026-10-31",
+    reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-10-31",
+  };
+  const withAll = computeEstimatedSales(solo({ 100: present }, OCT), soloOpts(opts));
+  assert.equal(withAll.perDealer[0].confirmedEstimatedSales, 1);
+
+  // Mark everything after Oct 10 as untrustworthy: no day can show the
+  // absence, so nothing may be established.
+  const trusted = new Set(OCT.filter((d) => d <= "2026-10-10"));
+  const gated = computeEstimatedSales(
+    solo({ 100: present }, OCT),
+    soloOpts({ ...opts, verifiedCaptureDays: new Map([[1, trusted]]) }),
+  );
+  assert.equal(gated.perDealer[0].confirmedEstimatedSales, 0, "no verified capture shows it gone");
+  assert.equal(gated.perDealer[0].episodes.length, 0);
+});
+
+test("confirmation skips untrusted days and waits for the next verified capture", () => {
+  const present = OCT.filter((d) => d <= "2026-10-05");
+  // Oct 6-20 untrusted; Oct 21 is the first verified capture showing absence.
+  const trusted = new Set(OCT.filter((d) => d <= "2026-10-05" || d >= "2026-10-21"));
+  const r = computeEstimatedSales(
+    solo({ 100: present }, OCT),
+    soloOpts({
+      windowStart: "2026-10-01", windowEnd: "2026-10-31",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-31", today: "2026-10-31",
+      verifiedCaptureDays: new Map([[1, trusted]]),
+    }),
+  );
+  const e = r.perDealer[0].episodes[0];
+  assert.equal(e.firstAbsentCapture, "2026-10-21", "the untrusted stretch is skipped entirely");
+  assert.equal(e.status, "confirmed");
+  assert.equal(r.perDealer[0].confirmedEstimatedSales, 1);
+});

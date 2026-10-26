@@ -28,6 +28,11 @@
 // episode: a day with no capture is silence, not evidence of absence.
 
 import { dateRange } from "./estimated-departures.ts";
+
+/** Re-exported so loaders need only one import for window maths. */
+export function dateRangeInclusive(start: string, end: string): string[] {
+  return dateRange(start, end);
+}
 import { shiftDate } from "./dealer-freshness.ts";
 
 /** 72 hours, expressed in hours, measured against real capture timestamps. */
@@ -93,6 +98,14 @@ export interface DepartureEpisode {
   returnedOn: string | null;
   /** False when the departure straddles a capture gap and cannot be dated. */
   dated: boolean;
+  /**
+   * Month this departure is reported in: the month of its FIRST VERIFIED
+   * ABSENCE. Not lastSeen (which can sit in the prior month) and not the
+   * confirmation date (which can sit in the next one).
+   */
+  reportingMonth: string | null;
+  /** False when the episode falls outside the reporting period. */
+  inReportingPeriod: boolean;
   /** Stable identity, so one episode can never be counted twice. */
   key: string;
 }
@@ -138,8 +151,29 @@ export interface EstimatedSalesOptions {
   dealerIds: number[];
   /** dealerId → ownership group. Movement inside a group is never a sale. */
   groupByDealer: Map<number, number | string | null>;
+  /**
+   * EVIDENCE window — the rows actually read.
+   *
+   * This must extend past the reporting period by at least the unwind window,
+   * otherwise a November return can never reverse an October sale. Widening
+   * it cannot create duplicate episodes: identity is the stable
+   * `dealer|vin|lastSeen` key.
+   */
   windowStart: string;
   windowEnd: string;
+  /**
+   * REPORTING period — what the figures describe. Defaults to the evidence
+   * window. A departure belongs to the month of its FIRST VERIFIED ABSENCE,
+   * so only episodes whose firstAbsentCapture falls in here are counted.
+   */
+  reportingStart?: string;
+  reportingEnd?: string;
+  /**
+   * Capture days trusted to establish or confirm an absence, per dealer.
+   * Supplied by lib/capture-verification. When omitted every day holding
+   * rows is trusted, which is the pre-Stage-3A behaviour.
+   */
+  verifiedCaptureDays?: Map<number, Set<string>>;
   /** "Now" as a Pacific calendar date, for month-end detection. */
   today: string;
   /** Dealers with a verified partial capture — forces INCOMPLETE. */
@@ -155,6 +189,8 @@ export interface EstimatedSalesOptions {
 export interface EstimatedSalesReport {
   windowStart: string;
   windowEnd: string;
+  reportingStart: string;
+  reportingEnd: string;
   confirmationHours: number;
   perDealer: DealerEstimatedSales[];
   totals: {
@@ -258,7 +294,12 @@ export function computeEstimatedSales(
   const confirmationHours = opts.confirmationHours ?? CONFIRMATION_HOURS;
   const boundaryThreshold = opts.confirmationDateBoundaries ?? CONFIRMATION_DATE_BOUNDARIES;
   const unwindDays = opts.unwindWindowDays ?? UNWIND_WINDOW_DAYS;
-  const expected = dateRange(opts.windowStart, opts.windowEnd);
+  const reportingStart = opts.reportingStart ?? opts.windowStart;
+  const reportingEnd = opts.reportingEnd ?? opts.windowEnd;
+  // Completeness describes the REPORTING period, never the wider evidence
+  // window — otherwise extending evidence into the next month would look like
+  // a coverage gap.
+  const expected = dateRange(reportingStart, reportingEnd);
   const partial = new Set(opts.partialCaptureDealerIds ?? []);
   const unverified = new Set(opts.unverifiedProviderDealerIds ?? []);
 
@@ -309,16 +350,25 @@ export function computeEstimatedSales(
 
   // Month end = the window reaches the last day of its month AND today is past it.
   const monthEnded = (() => {
-    const [y, m] = opts.windowEnd.split("-").map(Number);
+    const [y, m] = reportingEnd.split("-").map(Number);
     const lastOfMonth = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-    return opts.windowEnd >= lastOfMonth && opts.today > lastOfMonth;
+    return reportingEnd >= lastOfMonth && opts.today > lastOfMonth;
   })();
 
   const perDealer: DealerEstimatedSales[] = [];
 
   for (const dealerId of opts.dealerIds) {
     const dates = byDealer.get(dealerId)!;
-    const validDays = new Set([...dates.keys()].filter((d) => (dates.get(d)?.size ?? 0) > 0));
+    // A day only counts as evidence if it holds rows AND — when capture
+    // verification is supplied — was judged trustworthy. An errored, drifted,
+    // uncorroborated or suspected-partial capture can neither open nor
+    // confirm an absence.
+    const trusted = opts.verifiedCaptureDays?.get(dealerId) ?? null;
+    const validDays = new Set(
+      [...dates.keys()].filter(
+        (d) => (dates.get(d)?.size ?? 0) > 0 && (trusted === null || trusted.has(d)),
+      ),
+    );
     const valid = [...validDays].sort();
     const groupKey = String(opts.groupByDealer.get(dealerId) ?? `__solo_${dealerId}`);
     const siblings = opts.dealerIds.filter(
@@ -395,6 +445,8 @@ export function computeEstimatedSales(
           lastAdvertisedPrice: priceAt.get(`${dealerId}|${vin}|${last}`) ?? null,
           returnedOn: null,
           dated: shiftDate(last, 1) === nextCapture,
+          reportingMonth: nextCapture.slice(0, 7),
+          inReportingPeriod: nextCapture >= reportingStart && nextCapture <= reportingEnd,
           key,
         };
 
@@ -407,7 +459,7 @@ export function computeEstimatedSales(
         );
         if (movedWithinGroup) {
           episode.status = "transfer";
-          result.excludedTransfers += 1;
+          if (episode.inReportingPeriod) result.excludedTransfers += 1;
           result.episodes.push(episode);
           break; // the vehicle's story continues at the sibling, not here
         }
@@ -443,18 +495,26 @@ export function computeEstimatedSales(
           // Came back before any capture could confirm it — not a sale.
           episode.status = "voided";
           episode.returnedOn = returnDay;
-          result.voided += 1;
+          if (episode.inReportingPeriod) result.voided += 1;
         } else if (episode.status === "confirmed" && returnDay) {
+          // The return may land in a LATER month than the departure. Because
+          // the evidence window runs past the reporting period, that return
+          // is visible here and reverses the original month's sale.
           const daysBack = dateRange(episode.confirmedOn!, returnDay).length - 1;
           if (daysBack >= 0 && daysBack <= unwindDays) {
             episode.status = "unwound";
             episode.returnedOn = returnDay;
-            result.unwound += 1;
+            if (episode.inReportingPeriod) result.unwound += 1;
           }
         }
 
-        if (episode.status === "confirmed") result.confirmedEstimatedSales += 1;
-        else if (episode.status === "pending") result.pendingDepartures += 1;
+        // Counters describe the REPORTING period only. An episode outside it
+        // is retained on the record but contributes nothing, so widening the
+        // evidence window never inflates a month.
+        if (episode.inReportingPeriod) {
+          if (episode.status === "confirmed") result.confirmedEstimatedSales += 1;
+          else if (episode.status === "pending") result.pendingDepartures += 1;
+        }
 
         result.episodes.push(episode);
       }
@@ -467,7 +527,9 @@ export function computeEstimatedSales(
 
     // Advertised prices, confirmed sales only. Missing prices are excluded,
     // never substituted with zero.
-    const confirmed = result.episodes.filter((e) => e.status === "confirmed");
+    const confirmed = result.episodes.filter(
+      (e) => e.status === "confirmed" && e.inReportingPeriod,
+    );
     const priced = confirmed
       .map((e) => e.lastAdvertisedPrice)
       .filter((p): p is number => p != null);
@@ -482,8 +544,8 @@ export function computeEstimatedSales(
     // Projections and sell-through use CONFIRMED sales only, and are withheld
     // entirely when the month cannot be trusted.
     if (completeness.status !== "incomplete") {
-      const elapsedDays = dateRange(opts.windowStart, opts.windowEnd).length;
-      const [y, m] = opts.windowEnd.split("-").map(Number);
+      const elapsedDays = dateRange(reportingStart, reportingEnd).length;
+      const [y, m] = reportingEnd.split("-").map(Number);
       const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
       result.projectedMonthlySales =
         elapsedDays > 0
@@ -520,6 +582,8 @@ export function computeEstimatedSales(
   return {
     windowStart: opts.windowStart,
     windowEnd: opts.windowEnd,
+    reportingStart,
+    reportingEnd,
     confirmationHours,
     perDealer,
     totals,
