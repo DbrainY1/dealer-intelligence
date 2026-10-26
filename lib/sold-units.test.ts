@@ -40,7 +40,7 @@ test("verified dealers read monthly_sales; feed dealers read the estimator", asy
     }),
   });
 
-  const r = await loadSoldUnits(db, [1, 2, 3, 5, 6], NOW);
+  const r = await loadSoldUnits(db, [1, 2, 3, 5, 6], NOW, undefined, null, false);
 
   assert.equal(r.byDealer.get(5)!.units, 8);
   assert.equal(r.byDealer.get(5)!.basis, "verified");
@@ -54,7 +54,7 @@ test("verified dealers read monthly_sales; feed dealers read the estimator", asy
 
 test("a verified dealer with no monthly_sales row stays unknown, not zero", async () => {
   const db = new FakePostgrest({ monthly_sales: [], inventory_snapshots: [] });
-  const r = await loadSoldUnits(db, [5], NOW);
+  const r = await loadSoldUnits(db, [5], NOW, undefined, null, false);
   assert.equal(r.byDealer.get(5), undefined);
   assert.deepEqual(formatSoldCell(r.byDealer.get(5)), { text: "—", isEstimate: false });
 });
@@ -79,7 +79,7 @@ test("the period is month-to-date for BOTH populations", async () => {
     ],
     inventory_snapshots: snaps({ 1: { 9999: OCT }, 2: { 9999: OCT }, 3: { 9999: OCT } }),
   });
-  const r = await loadSoldUnits(db, [1, 5], NOW);
+  const r = await loadSoldUnits(db, [1, 5], NOW, undefined, null, false);
   assert.equal(r.monthStart, "2026-10-01");
   assert.equal(r.through, "2026-10-25");
   assert.equal(r.byDealer.get(5)!.units, 8, "September must not leak in");
@@ -94,7 +94,7 @@ test("sumSoldUnits adds verified and estimated, reporting each", async () => {
       3: { 9999: OCT },
     }),
   });
-  const r = await loadSoldUnits(db, [1, 2, 3, 5], NOW);
+  const r = await loadSoldUnits(db, [1, 2, 3, 5], NOW, undefined, null, false);
   const s = sumSoldUnits(r, [1, 2, 3, 5]);
   assert.equal(s.verified, 8);
   assert.equal(s.estimated, 2);
@@ -114,7 +114,7 @@ test("the group de-duplication safeguard removes a cross-store double count", as
       3: { 9999: OCT },
     }),
   });
-  const r = await loadSoldUnits(db, [1, 2, 3], NOW);
+  const r = await loadSoldUnits(db, [1, 2, 3], NOW, undefined, null, false);
   assert.equal(r.byDealer.get(1)!.units, 1, "store 1 reports its origin departure");
   assert.equal(r.byDealer.get(2)!.units, 1, "store 2 reports its origin departure");
 
@@ -134,7 +134,7 @@ test("de-duplication is skipped for a partial selection of the group", async () 
       3: { 9999: OCT },
     }),
   });
-  const r = await loadSoldUnits(db, [1, 2, 3], NOW);
+  const r = await loadSoldUnits(db, [1, 2, 3], NOW, undefined, null, false);
   const partial = sumSoldUnits(r, [1]); // only one store selected
   assert.equal(partial.deduplicatedBy, 0, "a whole-group figure must not be applied to a subset");
   assert.equal(partial.estimated, 1);
@@ -145,7 +145,7 @@ test("the feed set can be overridden, so fixtures need not collide with ids 1-3"
     monthly_sales: [{ id: 1, dealer_id: 1, month_start: "2026-10-01", units_sold: 42 }],
     inventory_snapshots: [],
   });
-  const r = await loadSoldUnits(db, [1], NOW, []); // no feed dealers
+  const r = await loadSoldUnits(db, [1], NOW, [], null, false); // no feed dealers
   assert.equal(r.byDealer.get(1)!.basis, "verified");
   assert.equal(r.byDealer.get(1)!.units, 42);
   assert.deepEqual(r.estimatedDealerIds, []);
@@ -156,7 +156,7 @@ test("feed dealers never read monthly_sales", async () => {
     monthly_sales: [{ id: 1, dealer_id: 1, month_start: "2026-10-01", units_sold: 999 }],
     inventory_snapshots: snaps({ 1: { 9999: OCT }, 2: { 9999: OCT }, 3: { 9999: OCT } }),
   });
-  const r = await loadSoldUnits(db, [1], NOW);
+  const r = await loadSoldUnits(db, [1], NOW, undefined, null, false);
   assert.equal(r.byDealer.get(1)!.units, 0, "the stray monthly_sales row is ignored");
   assert.equal(r.byDealer.get(1)!.basis, "estimated");
 });
@@ -172,7 +172,7 @@ test("a preloaded report is reused instead of re-running the estimator", async (
 
   // First: no preload — the provider runs the estimator itself.
   const dbCold = new FakePostgrest({ monthly_sales: [], inventory_snapshots: snapRows });
-  const cold = await loadSoldUnits(dbCold, [1, 2, 3], NOW);
+  const cold = await loadSoldUnits(dbCold, [1, 2, 3], NOW, undefined, null, false);
   const coldQueries = dbCold.queryCount;
   assert.ok(coldQueries > 0);
 
@@ -181,7 +181,7 @@ test("a preloaded report is reused instead of re-running the estimator", async (
   const dbWarm = new FakePostgrest({ monthly_sales: [], inventory_snapshots: snapRows });
   const report = await loadEstimatedDepartures(dbWarm, HOMENET_FEED, NOW);
   const afterReport = dbWarm.queryCount;
-  const warm = await loadSoldUnits(dbWarm, [1, 2, 3], NOW, undefined, report);
+  const warm = await loadSoldUnits(dbWarm, [1, 2, 3], NOW, undefined, report, false);
   const warmExtra = dbWarm.queryCount - afterReport;
 
   assert.equal(warmExtra, 0, `preloaded path must issue no estimator queries, issued ${warmExtra}`);
@@ -201,7 +201,7 @@ test("departed and pending VINs are surfaced through the provider", async () => 
       3: { 9999: OCT },
     }),
   });
-  const r = await loadSoldUnits(db, [1, 2, 3], NOW);
+  const r = await loadSoldUnits(db, [1, 2, 3], NOW, undefined, null, false);
   const s = r.byDealer.get(1)!;
   assert.equal(s.units, 1);
   assert.equal(s.departedVins.length, 1, "list length matches the published figure");
@@ -215,22 +215,22 @@ test("verified dealers expose empty VIN lists, never estimator data", async () =
     monthly_sales: [{ id: 1, dealer_id: 5, month_start: "2026-10-01", units_sold: 8 }],
     inventory_snapshots: [],
   });
-  const r = await loadSoldUnits(db, [5], NOW);
+  const r = await loadSoldUnits(db, [5], NOW, undefined, null, false);
   assert.deepEqual(r.byDealer.get(5)!.departedVins, []);
   assert.deepEqual(r.byDealer.get(5)!.pendingVins, []);
 });
 
 // ── Stage 3A: estimated_v2 behind a feature flag ────────────────────────────
 
-test("the v2 flag is OFF unless explicitly enabled", async () => {
+test("v2 is ON by default, with an explicit kill switch", async () => {
   const { isEstimatedSalesV2Enabled } = await import("./sold-units.ts");
   const prev = process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2;
   delete process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2;
-  assert.equal(isEstimatedSalesV2Enabled(), false, "absent means off");
-  process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = "1";
-  assert.equal(isEstimatedSalesV2Enabled(), false, "only the exact string 'true' enables it");
+  assert.equal(isEstimatedSalesV2Enabled(), true, "v2 is active by default");
   process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = "true";
   assert.equal(isEstimatedSalesV2Enabled(), true);
+  process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = "false";
+  assert.equal(isEstimatedSalesV2Enabled(), false, "explicit 'false' is the kill switch");
   if (prev === undefined) delete process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2;
   else process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = prev;
 });

@@ -336,6 +336,9 @@ export default async function CompetitorsPage({
           added,
           removed,
           soldBasis: soldUnits.byDealer.get(dealer.id)?.basis ?? "verified",
+          confirmed: soldUnits.byDealer.get(dealer.id)?.confirmedEstimatedSales,
+          pending: soldUnits.byDealer.get(dealer.id)?.pending,
+          completeness: soldUnits.byDealer.get(dealer.id)?.completeness,
           trend: priceTrends.get(dealer.id) ?? null,
         }))}
         dealers={dealers}

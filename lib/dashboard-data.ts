@@ -149,7 +149,9 @@ export async function loadMarketOverview(
   now: Date = new Date(),
   scope: MarketScope = DEFAULT_SCOPE,
   /** Test seam: override which dealers are served by the estimator. */
-  feedDealerIds?: number[]
+  feedDealerIds?: number[],
+  /** Test seam: force the v1 or v2 sold-units engine. */
+  useV2?: boolean
 ): Promise<MarketOverview> {
   const today = now;
   // Freshness is measured on Pacific calendar days, matching the timezone the
@@ -348,7 +350,7 @@ export async function loadMarketOverview(
   // verified dealers, the Estimated Departures estimator for feed dealers.
   // Both are month-to-date on the Pacific calendar, so the sell-through
   // numerator and denominator describe the same period and the same dealers.
-  const soldUnits = await loadSoldUnits(supabase, cohortIds, now, feedDealerIds);
+  const soldUnits = await loadSoldUnits(supabase, cohortIds, now, feedDealerIds, null, useV2);
   const soldThisMonth = sumSoldUnits(soldUnits, cohortIds).total;
 
   const excludedDealers: ExcludedDealer[] = dealerList

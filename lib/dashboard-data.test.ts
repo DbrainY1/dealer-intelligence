@@ -354,7 +354,7 @@ async function bothLoaders(tables: FakeTables) {
   const dbOld = new FakePostgrest(structuredClone(tables));
   const dbNew = new FakePostgrest(structuredClone(tables));
   const oldOut = await loadMarketOverviewLegacy(dbOld, NOW);
-  const newOut = await loadMarketOverview(dbNew, NOW, "current_recent", []);
+  const newOut = await loadMarketOverview(dbNew, NOW, "current_recent", [], false);
   return { oldOut, newOut, oldCount: dbOld.queryCount, newCount: dbNew.queryCount };
 }
 
