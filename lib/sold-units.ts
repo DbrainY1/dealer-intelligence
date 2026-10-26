@@ -56,6 +56,9 @@ export interface SoldUnits {
   pendingVins: DepartedVin[];
   /** v2 only: Confirmed + Pending. An episode sits in exactly one bucket. */
   potentialSales?: number;
+  /** v2 only: the confirmed component alone — projections and sell-through
+   *  must use THIS, never the potential headline. */
+  confirmedEstimatedSales?: number;
   /** v2 only: capture-coverage verdict for the reporting period. */
   completeness?: "complete" | "at_risk" | "incomplete";
   /** v2 only: why the period was judged incomplete or at risk. */
@@ -135,7 +138,10 @@ export async function loadSoldUnits(
     for (const d of report.perDealer) {
       byDealer.set(d.dealerId, {
         dealerId: d.dealerId,
-        units: d.confirmedEstimatedSales,
+        // Sold MTD shows POTENTIAL SALES. An episode occupies exactly one of
+        // the two buckets, so a pending departure converting to confirmed
+        // moves it across without raising this total a second time.
+        units: d.potentialSales,
         basis: "estimated_v2",
         pending: d.pendingDepartures,
         undated: d.episodes.filter((e) => e.status === "confirmed" && !e.dated).length,
@@ -156,6 +162,7 @@ export async function loadSoldUnits(
             dated: e.dated,
           })),
         potentialSales: d.potentialSales,
+        confirmedEstimatedSales: d.confirmedEstimatedSales,
         completeness: d.completeness.status,
         completenessReasons: d.completeness.reasons,
       });

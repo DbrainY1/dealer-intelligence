@@ -375,9 +375,14 @@ export function computeEstimatedSales(
       (id) => id !== dealerId && String(opts.groupByDealer.get(id) ?? `__solo_${id}`) === groupKey,
     );
 
+    // Fail closed: capture verification ran and trusted nothing for this
+    // dealer, so there is no admissible evidence of any departure.
+    const verificationRan = opts.verifiedCaptureDays !== undefined;
+    const noTrustedCaptures = verificationRan && (trusted?.size ?? 0) === 0;
+
     const completeness = assessCompleteness(expected, validDays, {
       monthEnded,
-      partialCapture: partial.has(dealerId),
+      partialCapture: partial.has(dealerId) || noTrustedCaptures,
       unverifiedProvider: unverified.has(dealerId),
     });
 
