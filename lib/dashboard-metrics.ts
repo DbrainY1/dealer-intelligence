@@ -42,6 +42,12 @@ export interface DealerRow {
   sold: number;
   /** Whether `sold` is a verified count or an estimate. */
   soldBasis: "verified" | "estimated";
+  /**
+   * Estimated dealers only: departures detected but not yet 72 hours old.
+   * Daily Sold is unavailable for these dealers — a same-day departure cannot
+   * be confirmed the same day — so the UI shows this instead of a false zero.
+   */
+  pendingConfirmation: number;
   added: number;
   transferred: number;
   dailySold: number;
@@ -130,7 +136,7 @@ export function buildDealerRows(
   dealers: { id: number; name: string }[],
   inventoryByDealer: Map<number, number>,
   /** Units per dealer from lib/sold-units — verified or estimated. */
-  soldByDealer: Map<number, { units: number | null; basis: "verified" | "estimated" }>,
+  soldByDealer: Map<number, { units: number | null; basis: "verified" | "estimated"; pending?: number }>,
   addedByDealer: Map<number, number>,
   transferredByDealer: Map<number, number>,
   dailyByDealer: Map<number, { count: number; vehicles: DailySoldVehicle[] }>
@@ -140,7 +146,7 @@ export function buildDealerRows(
     const dailySoldVehicles = dailyByDealer.get(d.id)?.vehicles ?? [];
 
     if (!inventoryByDealer.has(d.id)) {
-      return { name: d.name, count: 0, sold: 0, soldBasis: "verified", added: 0, transferred: 0, dailySold, dailySoldVehicles };
+      return { name: d.name, count: 0, sold: 0, soldBasis: "verified", pendingConfirmation: 0, added: 0, transferred: 0, dailySold, dailySoldVehicles };
     }
 
     const soldRow = soldByDealer.get(d.id);
@@ -150,6 +156,7 @@ export function buildDealerRows(
       count: inventoryByDealer.get(d.id) ?? 0,
       sold: soldRow?.units ?? 0,
       soldBasis: soldRow?.basis ?? "verified",
+      pendingConfirmation: soldRow?.pending ?? 0,
       added: addedByDealer.get(d.id) ?? 0,
       transferred: transferredByDealer.get(d.id) ?? 0,
       dailySold,

@@ -25,7 +25,7 @@ import { pacificDateStr } from "./dates.ts";
 import { fetchAllRows } from "./fetch-all.ts";
 import type { SupabaseLike } from "./dealer-freshness.ts";
 import { loadEstimatedDepartures, HOMENET_FEED, FEED_GROUPS } from "./estimated-departures-data.ts";
-import type { DepartureReport } from "./estimated-departures.ts";
+import type { DepartureReport, DepartedVin } from "./estimated-departures.ts";
 
 export type SoldBasis = "verified" | "estimated";
 
@@ -38,6 +38,10 @@ export interface SoldUnits {
   pending: number;
   /** Estimated only: confirmed but not datable (vanished across a feed gap). */
   undated: number;
+  /** Estimated only: the confirmed departures themselves. */
+  departedVins: DepartedVin[];
+  /** Estimated only: departures awaiting the 72-hour confirmation. */
+  pendingVins: DepartedVin[];
 }
 
 export interface SoldUnitsResult {
@@ -87,6 +91,12 @@ export async function loadSoldUnits(
   now: Date = new Date(),
   /** Override the feed-dealer set. Defaults to the configured FEED_GROUPS. */
   feedDealerIds?: number[],
+  /**
+   * An estimator report already loaded by the caller this request. Supplying
+   * it avoids running the estimator twice on a page that also renders the
+   * Estimated Departures panel.
+   */
+  preloadedReport?: DepartureReport | null,
 ): Promise<SoldUnitsResult> {
   const through = pacificDateStr(now);
   const monthStart = `${through.slice(0, 7)}-01`;
@@ -110,9 +120,11 @@ export async function loadSoldUnits(
               .range(from, to),
         )
       : Promise.resolve([]),
-    feedIds.length > 0
-      ? loadEstimatedDepartures(supabase, HOMENET_FEED, now)
-      : Promise.resolve(null),
+    feedIds.length === 0
+      ? Promise.resolve(null)
+      : preloadedReport
+        ? Promise.resolve(preloadedReport)
+        : loadEstimatedDepartures(supabase, HOMENET_FEED, now),
   ]);
 
   const byDealer = new Map<number, SoldUnits>();
@@ -124,6 +136,8 @@ export async function loadSoldUnits(
       basis: "verified",
       pending: 0,
       undated: 0,
+      departedVins: [],
+      pendingVins: [],
     });
   }
 
@@ -136,6 +150,8 @@ export async function loadSoldUnits(
         basis: "estimated",
         pending: d.pendingConfirmation,
         undated: d.confirmedUndated,
+        departedVins: d.departedVins,
+        pendingVins: d.pendingVins,
       });
     }
   }

@@ -61,11 +61,11 @@ test("a verified dealer with no monthly_sales row stays unknown, not zero", asyn
 
 test("formatSoldCell flags estimates and preserves the dash for unknowns", () => {
   assert.deepEqual(
-    formatSoldCell({ dealerId: 1, units: 24, basis: "estimated", pending: 2, undated: 10 }),
+    formatSoldCell({ dealerId: 1, units: 24, basis: "estimated", pending: 2, undated: 10, departedVins: [], pendingVins: [] }),
     { text: "24", isEstimate: true },
   );
   assert.deepEqual(
-    formatSoldCell({ dealerId: 5, units: 0, basis: "verified", pending: 0, undated: 0 }),
+    formatSoldCell({ dealerId: 5, units: 0, basis: "verified", pending: 0, undated: 0, departedVins: [], pendingVins: [] }),
     { text: "0", isEstimate: false },
   );
   assert.deepEqual(formatSoldCell(undefined), { text: "—", isEstimate: false });
@@ -159,4 +159,63 @@ test("feed dealers never read monthly_sales", async () => {
   const r = await loadSoldUnits(db, [1], NOW);
   assert.equal(r.byDealer.get(1)!.units, 0, "the stray monthly_sales row is ignored");
   assert.equal(r.byDealer.get(1)!.basis, "estimated");
+});
+
+// ── estimator reuse (no duplicate execution) ────────────────────────────────
+
+test("a preloaded report is reused instead of re-running the estimator", async () => {
+  const snapRows = snaps({
+    1: { 9999: OCT, 100: OCT.filter((d) => d <= "2026-10-20") },
+    2: { 9999: OCT },
+    3: { 9999: OCT },
+  });
+
+  // First: no preload — the provider runs the estimator itself.
+  const dbCold = new FakePostgrest({ monthly_sales: [], inventory_snapshots: snapRows });
+  const cold = await loadSoldUnits(dbCold, [1, 2, 3], NOW);
+  const coldQueries = dbCold.queryCount;
+  assert.ok(coldQueries > 0);
+
+  // Then: hand it the report a page already loaded.
+  const { loadEstimatedDepartures, HOMENET_FEED } = await import("./estimated-departures-data.ts");
+  const dbWarm = new FakePostgrest({ monthly_sales: [], inventory_snapshots: snapRows });
+  const report = await loadEstimatedDepartures(dbWarm, HOMENET_FEED, NOW);
+  const afterReport = dbWarm.queryCount;
+  const warm = await loadSoldUnits(dbWarm, [1, 2, 3], NOW, undefined, report);
+  const warmExtra = dbWarm.queryCount - afterReport;
+
+  assert.equal(warmExtra, 0, `preloaded path must issue no estimator queries, issued ${warmExtra}`);
+  assert.deepEqual(
+    [...warm.byDealer.values()].map((s) => s.units),
+    [...cold.byDealer.values()].map((s) => s.units),
+    "and must produce identical figures",
+  );
+});
+
+test("departed and pending VINs are surfaced through the provider", async () => {
+  const db = new FakePostgrest({
+    monthly_sales: [],
+    inventory_snapshots: snaps({
+      1: { 9999: OCT, 100: OCT.filter((d) => d <= "2026-10-20"), 101: OCT.filter((d) => d <= "2026-10-24") },
+      2: { 9999: OCT },
+      3: { 9999: OCT },
+    }),
+  });
+  const r = await loadSoldUnits(db, [1, 2, 3], NOW);
+  const s = r.byDealer.get(1)!;
+  assert.equal(s.units, 1);
+  assert.equal(s.departedVins.length, 1, "list length matches the published figure");
+  assert.equal(s.departedVins[0].vehicleId, 100);
+  assert.equal(s.pendingVins.length, 1);
+  assert.equal(s.pendingVins[0].vehicleId, 101);
+});
+
+test("verified dealers expose empty VIN lists, never estimator data", async () => {
+  const db = new FakePostgrest({
+    monthly_sales: [{ id: 1, dealer_id: 5, month_start: "2026-10-01", units_sold: 8 }],
+    inventory_snapshots: [],
+  });
+  const r = await loadSoldUnits(db, [5], NOW);
+  assert.deepEqual(r.byDealer.get(5)!.departedVins, []);
+  assert.deepEqual(r.byDealer.get(5)!.pendingVins, []);
 });
