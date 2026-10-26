@@ -215,7 +215,15 @@ export default async function CompetitorsPage({
   // Units come from the shared provider: monthly_sales for verified dealers,
   // the Estimated Departures estimator for feed dealers. monthly_sales above
   // is still read for the canonical cutoff metadata only.
-  const soldUnits = await loadSoldUnits(supabase, dealerIds, new Date());
+  // Estimated Departures for dealer-supplied feeds. Recomputed from the
+  // validated daily feeds on every render — no job, no table, no write — so a
+  // newly captured day shows up automatically. Reported entirely separately
+  // from canonical sold / monthly_sales, which are untouched.
+  //
+  // Loaded ONCE and handed to the sold-units provider as well, so the page no
+  // longer runs the estimator twice over identical inputs.
+  const departures = await loadEstimatedDepartures(supabase, HOMENET_FEED);
+  const soldUnits = await loadSoldUnits(supabase, dealerIds, new Date(), undefined, departures);
   const soldByDealer = new Map<number, number>();
   for (const [id, s] of soldUnits.byDealer) if (s.units !== null) soldByDealer.set(id, s.units);
   // Canonical partial-month cutoff (shared across rows this month; NULL for
@@ -232,11 +240,6 @@ export default async function CompetitorsPage({
   // each PriceSparkline used to fire from the browser on mount.
   const priceTrends = await loadPriceTrends(supabase, dealerIds, todayPacific);
 
-  // Estimated Departures for dealer-supplied feeds. Recomputed from the
-  // validated daily feeds on every render — no job, no table, no write — so a
-  // newly captured day shows up automatically. Reported entirely separately
-  // from canonical sold / monthly_sales, which are untouched.
-  const departures = await loadEstimatedDepartures(supabase, HOMENET_FEED);
   const feedDealerNames: Record<number, string> = {};
   for (const d of monitoredDealers)
     if (HOMENET_FEED.dealerIds.includes(d.id)) feedDealerNames[d.id] = d.name;

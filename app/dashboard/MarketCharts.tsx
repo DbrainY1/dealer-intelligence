@@ -29,6 +29,7 @@ interface DealerRow {
   count: number;
   sold: number;
   soldBasis?: "verified" | "estimated";
+  pendingConfirmation?: number;
   added: number;
   transferred: number;
   dailySold: number;
@@ -104,14 +105,30 @@ export default function MarketCharts({ byDealer, dealers, soldColumnLabel, veloc
                     {/* Daily Sold is expandable; stop propagation so the row's
                         dealer drill-down navigation is preserved. */}
                     <td
-                      className={`px-4 py-3 ${d.dailySold > 0 ? "text-orange-400 cursor-pointer hover:text-orange-300" : "text-gray-500"}`}
+                      className={`px-4 py-3 ${d.soldBasis === "estimated" ? "text-gray-500" : d.dailySold > 0 ? "text-orange-400 cursor-pointer hover:text-orange-300" : "text-gray-500"}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (d.dailySold > 0) setExpandedDealer(isExpanded ? null : d.name);
+                        if (d.soldBasis !== "estimated" && d.dailySold > 0)
+                          setExpandedDealer(isExpanded ? null : d.name);
                       }}
                     >
-                      {d.dailySold}
-                      {d.dailySold > 0 && <span className="ml-1 text-xs">{isExpanded ? "▾" : "▸"}</span>}
+                      {d.soldBasis === "estimated" ? (
+                        <span
+                          title="A same-day departure cannot clear the 72-hour confirmation, so no daily figure exists for a dealer-supplied feed."
+                        >
+                          —
+                          {(d.pendingConfirmation ?? 0) > 0 && (
+                            <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-400">
+                              {d.pendingConfirmation} pending
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <>
+                          {d.dailySold}
+                          {d.dailySold > 0 && <span className="ml-1 text-xs">{isExpanded ? "▾" : "▸"}</span>}
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {d.sold}

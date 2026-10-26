@@ -33,11 +33,11 @@ function SummaryRow({ label, units, pace, avg, total }: { label: string; units: 
       </div>
       <div className="text-center">
         <p className="text-white font-bold text-base">{fmt$(avg)}</p>
-        <p className="text-gray-500 text-xs">Avg Price</p>
+        <p className="text-gray-500 text-xs">Avg Advertised</p>
       </div>
       <div className="text-center">
         <p className="text-white font-bold text-base">{fmt$(total)}</p>
-        <p className="text-gray-500 text-xs">Total Revenue</p>
+        <p className="text-gray-500 text-xs">Total Advertised</p>
       </div>
     </div>
   );
@@ -128,11 +128,38 @@ export default async function DealerPage({ params }: PageProps) {
   const soldBasis = soldUnits.byDealer.get(Number(dealerId))?.basis ?? "verified";
   const estimatedUnits = soldUnits.byDealer.get(Number(dealerId))?.units ?? 0;
   const mtdUnits = soldBasis === "estimated" ? estimatedUnits : soldMTD.length;
+
+  // For feed dealers the canonical sold-event population is structurally
+  // empty, so every MTD figure on this page derives from the estimator's
+  // departed VINs instead. Prices are LAST ADVERTISED prices, not transacted
+  // amounts: vehicles with no advertised price are excluded from the average
+  // rather than counted as $0.
+  const departed = soldUnits.byDealer.get(Number(dealerId))?.departedVins ?? [];
+  const pendingVins = soldUnits.byDealer.get(Number(dealerId))?.pendingVins ?? [];
+  const estAdvertised = departed
+    .map((d) => d.lastAdvertisedPrice)
+    .filter((p): p is number => p != null);
+  const estTotalAdvertised = estAdvertised.reduce((a, b) => a + b, 0);
+  const estAvgAdvertised = estAdvertised.length > 0 ? estTotalAdvertised / estAdvertised.length : 0;
+  const estPricedCount = estAdvertised.length;
   const ytdUnits = soldYTD?.length ?? 0;
 
-  const mtdRevenue = soldMTD.reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
+  const canonicalMtdAdvertised = soldMTD
+    .map((e) => e.last_seen_price)
+    .filter((p): p is number => p != null);
+  const mtdRevenue =
+    soldBasis === "estimated"
+      ? estTotalAdvertised
+      : canonicalMtdAdvertised.reduce((a, b) => a + b, 0);
   const ytdRevenue = (soldYTD ?? []).reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
-  const mtdAvg = mtdUnits > 0 ? mtdRevenue / mtdUnits : 0;
+  // Average over PRICED vehicles only — a missing advertised price must never
+  // drag the mean toward zero.
+  const mtdAvg =
+    soldBasis === "estimated"
+      ? estAvgAdvertised
+      : canonicalMtdAdvertised.length > 0
+        ? canonicalMtdAdvertised.reduce((a, b) => a + b, 0) / canonicalMtdAdvertised.length
+        : 0;
   const ytdAvg = ytdUnits > 0 ? ytdRevenue / ytdUnits : 0;
 
   // Pace projections. MTD: cutoff-aware inclusive elapsed days when canonical,
@@ -194,7 +221,10 @@ export default async function DealerPage({ params }: PageProps) {
     .map(([date, value]) => ({ date, value }));
 
   // Fetch vehicle info for sold/added events
-  const soldVehicleIds = (soldMTD ?? []).map((e) => e.vehicle_id).filter(Boolean);
+  const soldVehicleIds = [
+    ...(soldMTD ?? []).map((e) => e.vehicle_id),
+    ...departed.map((d) => d.vehicleId),
+  ].filter(Boolean);
   const addedVehicleIds = (addedMTD ?? []).map((e) => e.vehicle_id).filter(Boolean);
   const allEventVehicleIds = [...new Set([...soldVehicleIds, ...addedVehicleIds])];
   const { data: eventVehicles } = allEventVehicleIds.length
@@ -239,6 +269,24 @@ export default async function DealerPage({ params }: PageProps) {
       {/* Summary Bar */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
         <SummaryRow label={soldBasis === "estimated" ? `${mtdLabel} (est.)` : mtdLabel} units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
+        {soldBasis === "estimated" && (
+          <p className="text-[11px] text-amber-200/70">
+            Estimated from inventory-feed departures — not verified sales. Advertised figures use
+            each vehicle&apos;s last advertised price and are not sales revenue.
+            {estPricedCount < departed.length && (
+              <>
+                {" "}
+                {departed.length - estPricedCount} of {departed.length} departed vehicle
+                {departed.length - estPricedCount === 1 ? " had" : "s had"} no advertised price and{" "}
+                {departed.length - estPricedCount === 1 ? "is" : "are"} excluded from the average.
+              </>
+            )}
+            {pendingVins.length > 0 && (
+              <> {pendingVins.length} further departure
+                {pendingVins.length === 1 ? " is" : "s are"} awaiting 72-hour confirmation.</>
+            )}
+          </p>
+        )}
         <div className="border-t border-gray-800" />
         <SummaryRow label="YTD" units={ytdUnits} pace={ytdPace} avg={ytdAvg} total={ytdRevenue} />
       </div>
@@ -278,13 +326,35 @@ export default async function DealerPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <h2 className="text-white font-semibold mb-4">
-            Vehicles Sold MTD <span className="text-gray-500 font-normal text-xs ml-1">({(soldMTD ?? []).length})</span>
+            {soldBasis === "estimated" ? "Vehicles Departed MTD (est.)" : "Vehicles Sold MTD"}{" "}
+            <span className="text-gray-500 font-normal text-xs ml-1">
+              ({soldBasis === "estimated" ? departed.length : (soldMTD ?? []).length})
+            </span>
+            {soldBasis === "estimated" && (
+              <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-400">
+                estimated · last advertised price
+              </span>
+            )}
           </h2>
           <VehicleEventList
-            events={(soldMTD ?? []).map(e => {
+            events={(soldBasis === "estimated"
+              ? departed.map((d) => {
+                  const v = evVehicleMap.get(d.vehicleId);
+                  return {
+                    vehicle_id: d.vehicleId,
+                    // Undated departures vanished into a capture gap; show the
+                    // last day the vehicle was actually seen rather than
+                    // inventing a departure date.
+                    event_date: d.dated ? d.lastSeen : `last seen ${d.lastSeen}`,
+                    price: d.lastAdvertisedPrice,
+                    mileage: mileageMap.get(d.vehicleId) ?? null,
+                    vin: v?.vin, year: v?.year, make: v?.make, model: v?.model,
+                  };
+                })
+              : (soldMTD ?? []).map(e => {
               const v = evVehicleMap.get(e.vehicle_id);
               return { vehicle_id: e.vehicle_id, event_date: e.event_date, price: e.last_seen_price, mileage: mileageMap.get(e.vehicle_id) ?? null, vin: v?.vin, year: v?.year, make: v?.make, model: v?.model };
-            })}
+            }))}
             priceColor="text-green-400"
             emptyMessage="No sales recorded yet"
             showMileage={true}

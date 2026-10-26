@@ -193,7 +193,7 @@ async function loadMarketOverviewLegacy(
         .single();
       if (!latestDate)
         return {
-          name: d.name, count: 0, sold: 0, soldBasis: "verified" as const, added: 0, transferred: 0,
+          name: d.name, count: 0, sold: 0, soldBasis: "verified" as const, pendingConfirmation: 0, added: 0, transferred: 0,
           dailySold: dailyByDealer.get(d.id)?.count ?? 0,
           dailySoldVehicles: dailyByDealer.get(d.id)?.vehicles ?? [],
         };
@@ -224,6 +224,7 @@ async function loadMarketOverviewLegacy(
         count: count ?? 0,
         sold: soldByDealer?.units_sold ?? 0,
         soldBasis: "verified" as const,
+        pendingConfirmation: 0,
         added: addedEvents?.length ?? 0,
         transferred: transferredEvents?.length ?? 0,
         dailySold: dailyByDealer.get(d.id)?.count ?? 0,

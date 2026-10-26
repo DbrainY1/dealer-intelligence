@@ -36,6 +36,23 @@ export interface FeedSnapshotRow {
   dealer_id: number;
   snapshot_date: string;
   vehicle_id: number;
+  /**
+   * Advertised list price on that capture day, when selected. Used only to
+   * carry each departed vehicle's LAST ADVERTISED price through to the UI.
+   * It is an asking price, never a transacted amount.
+   */
+  list_price?: number | null;
+}
+
+/** A single vehicle the estimator classified, with its last advertised price. */
+export interface DepartedVin {
+  vehicleId: number;
+  /** Last capture day this store held the vehicle. */
+  lastSeen: string;
+  /** Advertised price on that last capture. Null when never advertised. */
+  lastAdvertisedPrice: number | null;
+  /** False when the departure fell into a capture gap and cannot be dated. */
+  dated: boolean;
 }
 
 export interface DepartureOptions {
@@ -85,6 +102,13 @@ export interface DealerDepartures {
   duplicateVinRows: number;
   /** VINs still present on the dealer's last valid day. */
   retained: number;
+  /**
+   * The confirmed departures themselves. length === estimatedDepartures by
+   * construction — the same loop increments the counter and appends here.
+   */
+  departedVins: DepartedVin[];
+  /** Absent but not yet past the 72-hour confirmation. */
+  pendingVins: DepartedVin[];
 }
 
 /**
@@ -191,9 +215,12 @@ export function computeEstimatedDepartures(
 
   // dealer -> date -> VIN set, plus a duplicate tally.
   const byDealer = new Map<number, Map<string, Set<number>>>();
+  // dealer -> "vin|date" -> advertised price on that capture day
+  const priceByDealerVinDate = new Map<number, Map<string, number | null>>();
   const duplicates = new Map<number, number>();
   for (const id of opts.feedDealerIds) {
     byDealer.set(id, new Map());
+    priceByDealerVinDate.set(id, new Map());
     duplicates.set(id, 0);
   }
 
@@ -208,6 +235,11 @@ export function computeEstimatedDepartures(
     }
     if (set.has(r.vehicle_id)) duplicates.set(r.dealer_id, (duplicates.get(r.dealer_id) ?? 0) + 1);
     set.add(r.vehicle_id);
+    if (r.list_price !== undefined) {
+      priceByDealerVinDate
+        .get(r.dealer_id)!
+        .set(`${r.vehicle_id}|${r.snapshot_date}`, r.list_price);
+    }
   }
 
   // Group-wide presence: date -> VINs anywhere in the feed group. Used to spot
@@ -244,6 +276,8 @@ export function computeEstimatedDepartures(
       ofWhichArrivedMidWindow: 0,
       duplicateVinRows: duplicates.get(dealerId) ?? 0,
       retained: 0,
+      departedVins: [],
+      pendingVins: [],
     };
 
     if (validSorted.length === 0) {
@@ -263,6 +297,8 @@ export function computeEstimatedDepartures(
         seenDayCount.set(vin, (seenDayCount.get(vin) ?? 0) + 1);
       }
     }
+    // Advertised price on each VIN's most recent capture at this store.
+    const lastPrice = priceByDealerVinDate.get(dealerId) ?? new Map();
 
     const finalValidDay = validSorted[validSorted.length - 1];
 
@@ -304,16 +340,25 @@ export function computeEstimatedDepartures(
       const validDaysAfter = validSorted.filter((d) => d > last).length;
       const elapsedDays = dateRange(last, opts.windowEnd).length - 1;
 
+      const dated = validDays.has(shiftDate(last, 1));
+      const record: DepartedVin = {
+        vehicleId: vin,
+        lastSeen: last,
+        lastAdvertisedPrice: lastPrice.get(`${vin}|${last}`) ?? null,
+        dated,
+      };
+
       if (validDaysAfter >= confirmationDays && elapsedDays >= confirmationDays) {
         // Dated only when the very next day was actually captured. If the VIN
         // vanished into a gap we confirm the departure but refuse to date it.
-        const dayAfter = shiftDate(last, 1);
-        if (validDays.has(dayAfter)) result.confirmedDated += 1;
+        if (dated) result.confirmedDated += 1;
         else result.confirmedUndated += 1;
+        result.departedVins.push(record);
 
         if (firstSeen.get(vin)! > opts.windowStart) result.ofWhichArrivedMidWindow += 1;
       } else {
         result.pendingConfirmation += 1;
+        result.pendingVins.push(record);
       }
     }
 

@@ -64,7 +64,7 @@ export async function loadEstimatedDepartures(
   const base = () =>
     supabase
       .from("inventory_snapshots")
-      .select("dealer_id, snapshot_date, vehicle_id")
+      .select("dealer_id, snapshot_date, vehicle_id, list_price")
       .in("dealer_id", group.dealerIds)
       .gte("snapshot_date", windowStart)
       .lte("snapshot_date", windowEnd);

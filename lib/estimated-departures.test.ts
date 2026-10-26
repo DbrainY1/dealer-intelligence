@@ -349,3 +349,127 @@ test("group total never exceeds the per-dealer sum", () => {
   assert.equal(r.group.perDealerSum, 4);
   assert.equal(r.group.crossStoreDuplicatesRemoved, 1);
 });
+
+// ── VIN exposure: reconciliation, prices, pending exclusions ────────────────
+
+/** Rows carrying an advertised price, for the VIN-detail cases. */
+function pricedRows(
+  spec: Record<number, Record<number, [string, number | null][]>>,
+  captureDays: string[] = ALL,
+): FeedSnapshotRow[] {
+  const out: FeedSnapshotRow[] = [];
+  for (const d of GROUP)
+    for (const date of captureDays)
+      out.push({ dealer_id: d, snapshot_date: date, vehicle_id: FILLER, list_price: 1 });
+  for (const [d, vins] of Object.entries(spec))
+    for (const [v, pairs] of Object.entries(vins))
+      for (const [date, price] of pairs)
+        out.push({ dealer_id: Number(d), snapshot_date: date, vehicle_id: Number(v), list_price: price });
+  return out;
+}
+
+test("VIN list length always equals the published count", () => {
+  const r = run(
+    rows({
+      1: {
+        100: ALL.filter((d) => d <= "2026-10-12"),
+        101: ALL.filter((d) => d <= "2026-10-14"),
+        102: ALL.filter((d) => d <= "2026-10-24"), // pending, only 1 day absent
+      },
+    }),
+  );
+  const x = d1(r);
+  assert.equal(x.departedVins.length, x.estimatedDepartures, "confirmed list matches the count");
+  assert.equal(x.pendingVins.length, x.pendingConfirmation, "pending list matches the count");
+  assert.equal(x.departedVins.length, 2);
+  assert.equal(x.pendingVins.length, 1);
+  assert.deepEqual(x.departedVins.map((v) => v.vehicleId).sort(), [100, 101]);
+  assert.deepEqual(x.pendingVins.map((v) => v.vehicleId), [102]);
+});
+
+test("each departed VIN carries its LAST advertised price", () => {
+  const r = run(
+    pricedRows({
+      1: {
+        100: [
+          ["2026-10-01", 30000],
+          ["2026-10-02", 28000],
+          ["2026-10-03", 26500], // last seen → this is the price reported
+        ],
+      },
+    }),
+  );
+  const v = d1(r).departedVins.find((x) => x.vehicleId === 100)!;
+  assert.equal(v.lastAdvertisedPrice, 26500, "the most recent advertised price wins");
+  assert.equal(v.lastSeen, "2026-10-03");
+});
+
+test("a never-advertised vehicle reports a null price, never 0", () => {
+  const r = run(pricedRows({ 1: { 100: [["2026-10-01", null], ["2026-10-02", null]] } }));
+  const v = d1(r).departedVins.find((x) => x.vehicleId === 100)!;
+  assert.equal(v.lastAdvertisedPrice, null, "null, so callers can exclude it from the average");
+  assert.notEqual(v.lastAdvertisedPrice, 0);
+});
+
+test("departed VINs record whether the departure is datable", () => {
+  const r = run(
+    pricedRows({ 1: { 100: [["2026-10-01", 1000], ["2026-10-02", 1000], ["2026-10-03", 1000]] } }, VALID),
+  );
+  const v = d1(r).departedVins.find((x) => x.vehicleId === 100)!;
+  assert.equal(v.dated, false, "it vanished into the blackout");
+  assert.equal(v.lastSeen, "2026-10-03", "but the last sighting is still known");
+});
+
+test("pending VINs respect the transfer exclusion", () => {
+  // VIN 300 leaves store 1 yesterday and appears at store 2 — a transfer, so
+  // it must not sit in store 1's pending list awaiting confirmation.
+  const r = run(
+    rows({
+      1: { 300: ALL.filter((d) => d <= "2026-10-24") },
+      2: { 300: ["2026-10-25"] },
+    }),
+  );
+  assert.equal(d1(r).excludedTransfer, 1);
+  assert.equal(d1(r).pendingVins.length, 0, "a transfer is never pending confirmation");
+  assert.equal(d1(r).departedVins.length, 0);
+});
+
+test("pending VINs exclude vehicles still present on the last capture", () => {
+  const r = run(rows({ 1: { 400: ALL } }));
+  assert.equal(d1(r).pendingVins.length, 0, "retained vehicles are not pending");
+  assert.equal(d1(r).retained, 2);
+});
+
+test("confirmed and pending lists are disjoint", () => {
+  const r = run(
+    rows({
+      1: { 500: ALL.filter((d) => d <= "2026-10-10"), 501: ALL.filter((d) => d <= "2026-10-24") },
+    }),
+  );
+  const x = d1(r);
+  const confirmed = new Set(x.departedVins.map((v) => v.vehicleId));
+  for (const p of x.pendingVins) {
+    assert.equal(confirmed.has(p.vehicleId), false, `VIN ${p.vehicleId} is in both lists`);
+  }
+  assert.equal(x.departedVins.length + x.pendingVins.length, 2);
+});
+
+test("advertised-price aggregation excludes missing prices rather than zeroing them", () => {
+  const r = run(
+    pricedRows({
+      1: {
+        100: [["2026-10-01", 20000], ["2026-10-02", 20000]],
+        101: [["2026-10-01", null], ["2026-10-02", null]], // never advertised
+        102: [["2026-10-01", 40000], ["2026-10-02", 40000]],
+      },
+    }),
+  );
+  const vins = d1(r).departedVins;
+  assert.equal(vins.length, 3, "all three departed");
+
+  const priced = vins.map((v) => v.lastAdvertisedPrice).filter((p): p is number => p != null);
+  assert.equal(priced.length, 2, "only two carry an advertised price");
+  const avg = priced.reduce((a, b) => a + b, 0) / priced.length;
+  assert.equal(avg, 30000, "average over priced vehicles only");
+  assert.notEqual(avg, 20000, "a $0 substitution would have given 20000");
+});
