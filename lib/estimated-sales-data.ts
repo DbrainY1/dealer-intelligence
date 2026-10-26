@@ -36,6 +36,8 @@ export interface LoadOptions {
   unverifiedProviderDealerIds?: number[];
   /** Skip capture verification — used to reproduce the Stage 2 baseline. */
   skipVerification?: boolean;
+  /** Days of history read before the reporting month. Defaults to LOOKBACK_DAYS. */
+  lookbackDays?: number;
 }
 
 export interface EstimatedSalesLoad {
@@ -58,12 +60,30 @@ export function evidenceWindowFor(
   return extended < today ? extended : today;
 }
 
+/**
+ * Days of history read BEFORE the reporting month.
+ *
+ * A vehicle last seen on the 29th of the prior month has its first verified
+ * absence on the 1st, so it belongs to this month — but recognising that needs
+ * the prior sighting in view. Without lookback the episode is invisible and
+ * the month silently under-reports. The window is the confirmation interval
+ * plus slack for a capture gap spanning the boundary.
+ */
+export const LOOKBACK_DAYS = 10;
+
+export function evidenceStartFor(
+  reportingStart: string,
+  lookbackDays: number = LOOKBACK_DAYS,
+): string {
+  return shiftDate(reportingStart, -lookbackDays);
+}
+
 export async function loadEstimatedSales(
   supabase: SupabaseLike,
   opts: LoadOptions,
 ): Promise<EstimatedSalesLoad> {
   const today = pacificDateStr(opts.now ?? new Date());
-  const windowStart = opts.reportingStart;
+  const windowStart = evidenceStartFor(opts.reportingStart, opts.lookbackDays);
   const windowEnd = evidenceWindowFor(opts.reportingEnd, today);
   const ids = opts.dealerIds;
 
@@ -127,6 +147,11 @@ export async function loadEstimatedSales(
     ),
   );
 
+  // FAIL CLOSED. `verified` stays undefined only when verification is
+  // explicitly skipped (baseline reproduction). On the normal path it is
+  // always populated, so a dealer whose evidence could not be assembled ends
+  // up with an EMPTY trusted-day set and therefore publishes nothing — rather
+  // than silently reverting to "every day holding rows is trustworthy".
   let verified: Map<number, Set<string>> | undefined;
   const captureAssessments = new Map<number, CaptureAssessment[]>();
 
@@ -168,6 +193,9 @@ export async function loadEstimatedSales(
       captureAssessments.set(dealerId, assessDealerCaptures(evidence));
     }
     verified = verifiedCaptureDays(captureAssessments);
+    // Any dealer missing from the map gets an explicit empty set: unknown
+    // evidence is treated as no evidence, never as implicit trust.
+    for (const id of ids) if (!verified.has(id)) verified.set(id, new Set());
   }
 
   const report = computeEstimatedSales(snapshots, {

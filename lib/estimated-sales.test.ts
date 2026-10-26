@@ -606,3 +606,59 @@ test("confirmation skips untrusted days and waits for the next verified capture"
   assert.equal(e.status, "confirmed");
   assert.equal(r.perDealer[0].confirmedEstimatedSales, 1);
 });
+
+// ── Stage 3A follow-ups: lookback, fail-closed, potential headline ──────────
+
+test("LOOKBACK: a sighting in the prior month still yields a departure in this one", () => {
+  // Last seen Sep 29, first verified absence Oct 1 → an OCTOBER departure.
+  // Only visible if evidence reaches back before Oct 1.
+  const days = [...dateRange("2026-09-25", "2026-09-29"), ...dateRange("2026-10-01", "2026-10-10")];
+  const r = computeEstimatedSales(
+    solo({ 100: dateRange("2026-09-25", "2026-09-29") }, days),
+    soloOpts({
+      windowStart: "2026-09-21", windowEnd: "2026-10-10",
+      reportingStart: "2026-10-01", reportingEnd: "2026-10-10", today: "2026-10-10",
+    }),
+  );
+  const e = r.perDealer[0].episodes[0];
+  assert.equal(e.firstAbsentCapture, "2026-10-01");
+  assert.equal(e.reportingMonth, "2026-10");
+  assert.equal(r.perDealer[0].confirmedEstimatedSales, 1, "counted in October");
+});
+
+test("FAIL CLOSED: verification trusting nothing withholds the dealer entirely", () => {
+  const r = computeEstimatedSales(
+    solo({ 100: ALL.filter((d) => d <= "2026-10-10") }, ALL),
+    soloOpts({
+      windowStart: START, windowEnd: END, reportingStart: START, reportingEnd: END, today: END,
+      verifiedCaptureDays: new Map([[1, new Set<string>()]]),
+    }),
+  );
+  const d = r.perDealer[0];
+  assert.equal(d.confirmedEstimatedSales, 0);
+  assert.equal(d.pendingDepartures, 0);
+  assert.equal(d.potentialSales, 0);
+  assert.equal(d.completeness.status, "incomplete", "and the month is marked incomplete");
+  assert.equal(d.projectedMonthlySales, null, "projections suppressed");
+  assert.equal(d.sellThroughPct, null);
+});
+
+test("FAIL CLOSED: absent verification map still means implicit trust (baseline path)", () => {
+  const r = computeEstimatedSales(
+    solo({ 100: ALL.filter((d) => d <= "2026-10-10") }, ALL),
+    soloOpts({ windowStart: START, windowEnd: END, reportingStart: START, reportingEnd: END, today: END }),
+  );
+  assert.equal(r.perDealer[0].confirmedEstimatedSales, 1, "skipVerification path is unchanged");
+});
+
+test("POTENTIAL: confirmed + pending, and converting does not raise it twice", () => {
+  const r = computeEstimatedSales(
+    solo({ 100: ALL.filter((d) => d <= "2026-10-10"), 101: ALL.filter((d) => d <= "2026-10-24") }, ALL),
+    soloOpts({ windowStart: START, windowEnd: END, reportingStart: START, reportingEnd: END, today: END }),
+  );
+  const d = r.perDealer[0];
+  assert.equal(d.confirmedEstimatedSales, 1);
+  assert.equal(d.pendingDepartures, 1);
+  assert.equal(d.potentialSales, 2, "the headline is the sum");
+  assert.equal(d.projectedMonthlySales !== null, true);
+});
