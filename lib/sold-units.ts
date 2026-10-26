@@ -30,15 +30,19 @@ import type { DepartureReport, DepartedVin } from "./estimated-departures.ts";
 export type SoldBasis = "verified" | "estimated" | "estimated_v2";
 
 /**
- * Stage 3A feature flag. OFF unless NEXT_PUBLIC_ESTIMATED_SALES_V2 === "true".
+ * Universal v2 estimated-sales engine — ACTIVE by default.
  *
- * While off, nothing about DealerIQ's behaviour changes: feed dealers keep
- * using the shipped per-feed estimator and every other dealer keeps using
- * monthly_sales. The v2 engine is reachable only by opting in, so this PR
- * cannot move a production figure.
+ * Activation lives in code rather than in an environment variable because the
+ * flag is read during the server render and a NEXT_PUBLIC_ value is inlined at
+ * BUILD time: setting it in the hosting dashboard would not change the shipped
+ * bundle without a redeploy anyway. Keeping it here makes activation
+ * version-controlled and makes rollback a revert.
+ *
+ * NEXT_PUBLIC_ESTIMATED_SALES_V2="false" remains a kill switch: set it and
+ * redeploy to fall back to monthly_sales plus the per-feed v1 estimator.
  */
 export function isEstimatedSalesV2Enabled(): boolean {
-  return process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 === "true";
+  return process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 !== "false";
 }
 
 export interface SoldUnits {

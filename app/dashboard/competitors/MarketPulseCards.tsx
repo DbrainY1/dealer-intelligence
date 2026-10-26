@@ -30,6 +30,12 @@ export interface ScorecardRow {
   trend: PriceTrend | null;
   /** Whether `sold` is a verified count or a feed-derived estimate. */
   soldBasis?: "verified" | "estimated" | "estimated_v2";
+  /** v2: the confirmed component of Potential Sales. */
+  confirmed?: number;
+  /** v2: departures still inside the 72-hour confirmation window. */
+  pending?: number;
+  /** v2: capture-coverage verdict for the reporting period. */
+  completeness?: "complete" | "at_risk" | "incomplete";
 }
 
 function SortableCard({
@@ -81,6 +87,22 @@ function SortableCard({
         >
           {row.name}
         </p>
+        {row.completeness && row.completeness !== "complete" && (
+          <span
+            title={
+              row.completeness === "incomplete"
+                ? "Incomplete capture coverage — projections and sell-through are suppressed for this period"
+                : "Capture coverage at risk for this period"
+            }
+            className={`shrink-0 text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded border ${
+              row.completeness === "incomplete"
+                ? "border-red-700 text-red-300"
+                : "border-amber-700 text-amber-300"
+            }`}
+          >
+            {row.completeness === "incomplete" ? "incomplete" : "at risk"}
+          </span>
+        )}
       </div>
 
       {/* Stats — click to select/deselect */}
@@ -95,8 +117,19 @@ function SortableCard({
               {row.sold == null ? "—" : row.sold}
             </p>
             <p className="text-gray-500 text-xs">
-              {row.soldBasis !== "verified" ? "est. sales" : soldLabel}
+              {row.soldBasis === "estimated_v2"
+                ? "potential (est.)"
+                : row.soldBasis !== "verified"
+                ? "est. sales"
+                : soldLabel}
             </p>
+            {row.soldBasis === "estimated_v2" && (
+              <p className="text-[10px] text-gray-500 leading-tight">
+                <span className="text-emerald-300">{row.confirmed ?? 0}</span> confirmed
+                {" · "}
+                <span className="text-amber-300">{row.pending ?? 0}</span> pending
+              </p>
+            )}
           </div>
         </div>
 
