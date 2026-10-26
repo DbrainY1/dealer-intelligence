@@ -27,7 +27,19 @@ import type { SupabaseLike } from "./dealer-freshness.ts";
 import { loadEstimatedDepartures, HOMENET_FEED, FEED_GROUPS } from "./estimated-departures-data.ts";
 import type { DepartureReport, DepartedVin } from "./estimated-departures.ts";
 
-export type SoldBasis = "verified" | "estimated";
+export type SoldBasis = "verified" | "estimated" | "estimated_v2";
+
+/**
+ * Stage 3A feature flag. OFF unless NEXT_PUBLIC_ESTIMATED_SALES_V2 === "true".
+ *
+ * While off, nothing about DealerIQ's behaviour changes: feed dealers keep
+ * using the shipped per-feed estimator and every other dealer keeps using
+ * monthly_sales. The v2 engine is reachable only by opting in, so this PR
+ * cannot move a production figure.
+ */
+export function isEstimatedSalesV2Enabled(): boolean {
+  return process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 === "true";
+}
 
 export interface SoldUnits {
   dealerId: number;
@@ -42,6 +54,12 @@ export interface SoldUnits {
   departedVins: DepartedVin[];
   /** Estimated only: departures awaiting the 72-hour confirmation. */
   pendingVins: DepartedVin[];
+  /** v2 only: Confirmed + Pending. An episode sits in exactly one bucket. */
+  potentialSales?: number;
+  /** v2 only: capture-coverage verdict for the reporting period. */
+  completeness?: "complete" | "at_risk" | "incomplete";
+  /** v2 only: why the period was judged incomplete or at risk. */
+  completenessReasons?: string[];
 }
 
 export interface SoldUnitsResult {
@@ -97,9 +115,59 @@ export async function loadSoldUnits(
    * Estimated Departures panel.
    */
   preloadedReport?: DepartureReport | null,
+  /** Force the v2 engine on or off, bypassing the flag. Tests only. */
+  useV2?: boolean,
 ): Promise<SoldUnitsResult> {
   const through = pacificDateStr(now);
   const monthStart = `${through.slice(0, 7)}-01`;
+
+  // Stage 3A: the universal engine, reachable only behind the flag. While it
+  // is off this branch never runs and behaviour is byte-for-byte unchanged.
+  if (useV2 ?? isEstimatedSalesV2Enabled()) {
+    const { loadEstimatedSales } = await import("./estimated-sales-data.ts");
+    const { report } = await loadEstimatedSales(supabase, {
+      dealerIds,
+      reportingStart: monthStart,
+      reportingEnd: through,
+      now,
+    });
+    const byDealer = new Map<number, SoldUnits>();
+    for (const d of report.perDealer) {
+      byDealer.set(d.dealerId, {
+        dealerId: d.dealerId,
+        units: d.confirmedEstimatedSales,
+        basis: "estimated_v2",
+        pending: d.pendingDepartures,
+        undated: d.episodes.filter((e) => e.status === "confirmed" && !e.dated).length,
+        departedVins: d.episodes
+          .filter((e) => e.status === "confirmed" && e.inReportingPeriod)
+          .map((e) => ({
+            vehicleId: e.vehicleId,
+            lastSeen: e.lastSeen,
+            lastAdvertisedPrice: e.lastAdvertisedPrice,
+            dated: e.dated,
+          })),
+        pendingVins: d.episodes
+          .filter((e) => e.status === "pending" && e.inReportingPeriod)
+          .map((e) => ({
+            vehicleId: e.vehicleId,
+            lastSeen: e.lastSeen,
+            lastAdvertisedPrice: e.lastAdvertisedPrice,
+            dated: e.dated,
+          })),
+        potentialSales: d.potentialSales,
+        completeness: d.completeness.status,
+        completenessReasons: d.completeness.reasons,
+      });
+    }
+    return {
+      byDealer,
+      estimated: null,
+      estimatedDealerIds: [...byDealer.keys()],
+      monthStart,
+      through,
+    };
+  }
 
   const isFeed = feedDealerIds
     ? (id: number) => feedDealerIds.includes(id)

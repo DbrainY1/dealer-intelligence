@@ -41,7 +41,7 @@ export interface DealerRow {
   count: number;
   sold: number;
   /** Whether `sold` is a verified count or an estimate. */
-  soldBasis: "verified" | "estimated";
+  soldBasis: "verified" | "estimated" | "estimated_v2";
   /**
    * Estimated dealers only: departures detected but not yet 72 hours old.
    * Daily Sold is unavailable for these dealers — a same-day departure cannot
@@ -136,7 +136,7 @@ export function buildDealerRows(
   dealers: { id: number; name: string }[],
   inventoryByDealer: Map<number, number>,
   /** Units per dealer from lib/sold-units — verified or estimated. */
-  soldByDealer: Map<number, { units: number | null; basis: "verified" | "estimated"; pending?: number }>,
+  soldByDealer: Map<number, { units: number | null; basis: "verified" | "estimated" | "estimated_v2"; pending?: number }>,
   addedByDealer: Map<number, number>,
   transferredByDealer: Map<number, number>,
   dailyByDealer: Map<number, { count: number; vehicles: DailySoldVehicle[] }>

@@ -219,3 +219,54 @@ test("verified dealers expose empty VIN lists, never estimator data", async () =
   assert.deepEqual(r.byDealer.get(5)!.departedVins, []);
   assert.deepEqual(r.byDealer.get(5)!.pendingVins, []);
 });
+
+// ── Stage 3A: estimated_v2 behind a feature flag ────────────────────────────
+
+test("the v2 flag is OFF unless explicitly enabled", async () => {
+  const { isEstimatedSalesV2Enabled } = await import("./sold-units.ts");
+  const prev = process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2;
+  delete process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2;
+  assert.equal(isEstimatedSalesV2Enabled(), false, "absent means off");
+  process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = "1";
+  assert.equal(isEstimatedSalesV2Enabled(), false, "only the exact string 'true' enables it");
+  process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = "true";
+  assert.equal(isEstimatedSalesV2Enabled(), true);
+  if (prev === undefined) delete process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2;
+  else process.env.NEXT_PUBLIC_ESTIMATED_SALES_V2 = prev;
+});
+
+test("with the flag off, behaviour is unchanged (v1 path, v1 basis)", async () => {
+  const db = new FakePostgrest({
+    monthly_sales: [{ id: 1, dealer_id: 5, month_start: "2026-10-01", units_sold: 8 }],
+    inventory_snapshots: snaps({ 1: { 9999: OCT }, 2: { 9999: OCT }, 3: { 9999: OCT } }),
+  });
+  const r = await loadSoldUnits(db, [1, 5], NOW, undefined, null, false);
+  assert.equal(r.byDealer.get(5)!.basis, "verified");
+  assert.equal(r.byDealer.get(1)!.basis, "estimated", "v1 per-feed estimator, not v2");
+});
+
+test("with v2 forced on, feed AND scraper dealers both use the universal engine", async () => {
+  const db = new FakePostgrest({
+    dealers: [
+      { id: 1, dealer_group_id: 7 },
+      { id: 5, dealer_group_id: null },
+    ],
+    monthly_sales: [{ id: 1, dealer_id: 5, month_start: "2026-10-01", units_sold: 8 }],
+    scrape_log: [],
+    coverage_report: [],
+    dealer_failure_state: [],
+    inventory_snapshots: snaps({
+      1: { 9999: OCT, 100: OCT.filter((d) => d <= "2026-10-10") },
+      5: { 8888: OCT },
+    }),
+  });
+  const r = await loadSoldUnits(db, [1, 5], NOW, undefined, null, true);
+  assert.equal(r.byDealer.get(1)!.basis, "estimated_v2");
+  assert.equal(
+    r.byDealer.get(5)!.basis,
+    "estimated_v2",
+    "one methodology — a scraper dealer is no longer read from monthly_sales",
+  );
+  assert.equal(typeof r.byDealer.get(1)!.potentialSales, "number");
+  assert.ok(r.byDealer.get(1)!.completeness, "completeness travels with the figure");
+});

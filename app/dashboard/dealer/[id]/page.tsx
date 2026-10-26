@@ -127,7 +127,7 @@ export default async function DealerPage({ params }: PageProps) {
   const soldUnits = await loadSoldUnits(db, [Number(dealerId)], new Date());
   const soldBasis = soldUnits.byDealer.get(Number(dealerId))?.basis ?? "verified";
   const estimatedUnits = soldUnits.byDealer.get(Number(dealerId))?.units ?? 0;
-  const mtdUnits = soldBasis === "estimated" ? estimatedUnits : soldMTD.length;
+  const mtdUnits = soldBasis !== "verified" ? estimatedUnits : soldMTD.length;
 
   // For feed dealers the canonical sold-event population is structurally
   // empty, so every MTD figure on this page derives from the estimator's
@@ -148,14 +148,14 @@ export default async function DealerPage({ params }: PageProps) {
     .map((e) => e.last_seen_price)
     .filter((p): p is number => p != null);
   const mtdRevenue =
-    soldBasis === "estimated"
+    soldBasis !== "verified"
       ? estTotalAdvertised
       : canonicalMtdAdvertised.reduce((a, b) => a + b, 0);
   const ytdRevenue = (soldYTD ?? []).reduce((s, e) => s + (e.last_seen_price ?? 0), 0);
   // Average over PRICED vehicles only — a missing advertised price must never
   // drag the mean toward zero.
   const mtdAvg =
-    soldBasis === "estimated"
+    soldBasis !== "verified"
       ? estAvgAdvertised
       : canonicalMtdAdvertised.length > 0
         ? canonicalMtdAdvertised.reduce((a, b) => a + b, 0) / canonicalMtdAdvertised.length
@@ -268,8 +268,8 @@ export default async function DealerPage({ params }: PageProps) {
 
       {/* Summary Bar */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
-        <SummaryRow label={soldBasis === "estimated" ? `${mtdLabel} (est.)` : mtdLabel} units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
-        {soldBasis === "estimated" && (
+        <SummaryRow label={soldBasis !== "verified" ? `${mtdLabel} (est.)` : mtdLabel} units={mtdUnits} pace={mtdPace} avg={mtdAvg} total={mtdRevenue} />
+        {soldBasis !== "verified" && (
           <p className="text-[11px] text-amber-200/70">
             Estimated from inventory-feed departures — not verified sales. Advertised figures use
             each vehicle&apos;s last advertised price and are not sales revenue.
@@ -326,18 +326,18 @@ export default async function DealerPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <h2 className="text-white font-semibold mb-4">
-            {soldBasis === "estimated" ? "Vehicles Departed MTD (est.)" : "Vehicles Sold MTD"}{" "}
+            {soldBasis !== "verified" ? "Vehicles Departed MTD (est.)" : "Vehicles Sold MTD"}{" "}
             <span className="text-gray-500 font-normal text-xs ml-1">
-              ({soldBasis === "estimated" ? departed.length : (soldMTD ?? []).length})
+              ({soldBasis !== "verified" ? departed.length : (soldMTD ?? []).length})
             </span>
-            {soldBasis === "estimated" && (
+            {soldBasis !== "verified" && (
               <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-400">
                 estimated · last advertised price
               </span>
             )}
           </h2>
           <VehicleEventList
-            events={(soldBasis === "estimated"
+            events={(soldBasis !== "verified"
               ? departed.map((d) => {
                   const v = evVehicleMap.get(d.vehicleId);
                   return {

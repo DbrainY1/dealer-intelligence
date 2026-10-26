@@ -28,7 +28,7 @@ interface DealerRow {
   name: string;
   count: number;
   sold: number;
-  soldBasis?: "verified" | "estimated";
+  soldBasis?: "verified" | "estimated" | "estimated_v2";
   pendingConfirmation?: number;
   added: number;
   transferred: number;
@@ -105,14 +105,14 @@ export default function MarketCharts({ byDealer, dealers, soldColumnLabel, veloc
                     {/* Daily Sold is expandable; stop propagation so the row's
                         dealer drill-down navigation is preserved. */}
                     <td
-                      className={`px-4 py-3 ${d.soldBasis === "estimated" ? "text-gray-500" : d.dailySold > 0 ? "text-orange-400 cursor-pointer hover:text-orange-300" : "text-gray-500"}`}
+                      className={`px-4 py-3 ${d.soldBasis !== "verified" ? "text-gray-500" : d.dailySold > 0 ? "text-orange-400 cursor-pointer hover:text-orange-300" : "text-gray-500"}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (d.soldBasis !== "estimated" && d.dailySold > 0)
                           setExpandedDealer(isExpanded ? null : d.name);
                       }}
                     >
-                      {d.soldBasis === "estimated" ? (
+                      {d.soldBasis !== "verified" ? (
                         <span
                           title="A same-day departure cannot clear the 72-hour confirmation, so no daily figure exists for a dealer-supplied feed."
                         >
@@ -132,7 +132,7 @@ export default function MarketCharts({ byDealer, dealers, soldColumnLabel, veloc
                     </td>
                     <td className="px-4 py-3">
                       {d.sold}
-                      {d.soldBasis === "estimated" && (
+                      {d.soldBasis !== "verified" && (
                         <span
                           className="ml-1 text-[10px] uppercase tracking-wide text-amber-400"
                           title="Estimated from inventory-feed departures — not a verified sale"
