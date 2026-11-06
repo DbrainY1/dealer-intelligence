@@ -13,7 +13,7 @@
 --     user in this shared project, can read DealerIQ data directly through the
 --     Supabase REST API, bypassing the app's role checks entirely.
 --   * anon/authenticated still hold INSERT/UPDATE/DELETE/TRUNCATE/TRIGGER/
---     REFERENCES grants on user_roles. RLS (no write policy) blocks the DML,
+--     REFERENCES/MAINTAIN (Postgres 17) grants on user_roles. RLS (no write policy) blocks the DML,
 --     but TRUNCATE is not subject to RLS. PostgREST does not expose TRUNCATE,
 --     so this is defense in depth rather than an open hole.
 --
@@ -43,8 +43,17 @@
 --   Nothing else references user_roles: no triggers, functions or views, and the
 --   only other policy using it is map_config_write_developer (verified).
 --
--- ORDERING: independent of the app PR; either can ship first. Recommended:
---   deploy the app PR, verify, then apply this.
+-- ORDERING: compatible with PR #21 in either order (verified: the app reads
+--   only with the user's JWT, and every account that uses DealerIQ today has a
+--   role row). Disabling public sign-up first is the faster containment; this
+--   migration then also covers any existing authenticated account without a
+--   DealerIQ role (1 today: an unaccepted invite that has never signed in).
+--
+-- RE-VERIFIED 2026-11-05 (final check, read-only): all 10 target policies are
+--   PERMISSIVE, TO {authenticated}, FOR SELECT, with the exact expressions in
+--   the rollback below; no RESTRICTIVE policies; no other policy on these
+--   tables except map_config_write_developer; has_dealeriq_role() does not yet
+--   exist; Postgres 17.6.
 -- =============================================================================
 
 
@@ -54,11 +63,39 @@
 -- SELECT tablename, policyname, roles, cmd, qual, with_check
 -- FROM pg_policies WHERE schemaname = 'public' ORDER BY 1, 2;
 --
--- SELECT grantee, privilege_type FROM information_schema.role_table_grants
--- WHERE table_schema = 'public' AND table_name = 'user_roles' ORDER BY 1, 2;
+-- -- information_schema omits MAINTAIN; read the ACL directly:
+-- SELECT a.grantee::regrole, a.privilege_type
+-- FROM pg_class c, aclexplode(c.relacl) a
+-- WHERE c.oid = 'public.user_roles'::regclass ORDER BY 1, 2;
 
 
 BEGIN;
+
+-- -----------------------------------------------------------------------------
+-- (0b) PRECONDITION GUARD — abort (whole transaction) if production has drifted
+--      from what this migration was reviewed against. In particular, any extra
+--      PERMISSIVE policy would be OR-ed with the gated one and bypass it.
+-- -----------------------------------------------------------------------------
+DO $$
+DECLARE
+  bad text;
+BEGIN
+  SELECT string_agg(format('%s.%s (%s %s)', tablename, policyname, permissive, cmd), ', ')
+    INTO bad
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename IN ('dealers','dealer_groups','vehicles','vin_presence','inventory_snapshots',
+                      'inventory_events','monthly_sales','market_signals','scrape_log','map_config')
+    AND policyname NOT IN ('dealers_select_authenticated','dealer_groups_select_authenticated',
+                           'vehicles_select_authenticated','vin_presence_select_authenticated',
+                           'inventory_snapshots_select_authenticated','inventory_events_select_authenticated',
+                           'monthly_sales_select_authenticated','market_signals_select_authenticated',
+                           'scrape_log_select_authenticated','map_config_select_authenticated',
+                           'map_config_write_developer');
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'Unexpected policies present, review before applying: %', bad;
+  END IF;
+END $$;
 
 -- -----------------------------------------------------------------------------
 -- (1) Role predicate. Keep this list in sync with DEALERIQ_ROLES in lib/authz.ts.
@@ -103,52 +140,80 @@ ALTER POLICY map_config_select_authenticated          ON public.map_config      
 -- (3) user_roles grants: clients may only SELECT (own row, via RLS).
 --     Role rows are written exclusively by the service-role invite route.
 -- -----------------------------------------------------------------------------
-REVOKE INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES ON public.user_roles FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES, MAINTAIN ON public.user_roles FROM anon, authenticated;
 REVOKE SELECT ON public.user_roles FROM anon;
 
 COMMIT;
 
 
 -- =============================================================================
--- (4) ALLOW / DENY TESTS — run after applying. Read-only; ends in ROLLBACK.
---     Uses existing accounts by role only; prints booleans, never user data.
+-- (4) ALLOW / DENY TESTS — run after applying. Every block is READ ONLY and
+--     ends in ROLLBACK: no test writes, even inside a transaction. Write denial
+--     is proven from privileges and policy predicates instead. JWT simulation
+--     exercises RLS only; it does not prove the production login flow.
+--     Prints booleans only — every value should be true.
 -- =============================================================================
--- BEGIN;
---   -- a) An account with a DealerIQ role can read market data.
---   SELECT set_config('request.jwt.claims', json_build_object(
---     'role', 'authenticated',
+-- -- a) Dealer Principal (existing account) reads market data; sees only own role row.
+-- BEGIN READ ONLY;
+--   SELECT set_config('request.jwt.claims', json_build_object('role','authenticated',
 --     'sub', (SELECT user_id FROM public.user_roles WHERE role = 'dealer_principal' LIMIT 1))::text, true);
 --   SET LOCAL ROLE authenticated;
---   SELECT (SELECT count(*) FROM public.dealers) > 0           AS a1_role_user_reads_dealers,          -- expect true
---          (SELECT count(*) FROM public.inventory_events) > 0  AS a2_role_user_reads_events,           -- expect true
---          (SELECT count(*) FROM public.user_roles) = 1        AS a3_role_user_sees_only_own_role_row; -- expect true
---   RESET ROLE;
+--   SELECT (SELECT count(*) FROM public.dealers) > 0             AS a1_reads_dealers,
+--          (SELECT count(*) FROM public.inventory_snapshots) > 0 AS a2_reads_snapshots,
+--          (SELECT count(*) FROM public.map_config) > 0          AS a3_reads_map_config,
+--          (SELECT count(*) FROM public.user_roles) = 1          AS a4_only_own_role_row,
+--          NOT EXISTS (SELECT 1 FROM public.user_roles ur
+--                      WHERE ur.user_id = auth.uid() AND ur.role = 'developer') AS a5_cannot_write_map_config;
+-- ROLLBACK;
 --
---   -- b) An authenticated account WITHOUT a role row sees nothing.
---   SELECT set_config('request.jwt.claims', json_build_object(
---     'role', 'authenticated', 'sub', gen_random_uuid())::text, true);
+-- -- b) Viewer: run once the controlled Viewer invite exists (0 viewers today).
+-- --    Same as (a) with role = 'viewer'; a1–a5 must all be true.
+--
+-- -- c) Developer: reads, and satisfies map_config_write_developer's predicate.
+-- BEGIN READ ONLY;
+--   SELECT set_config('request.jwt.claims', json_build_object('role','authenticated',
+--     'sub', (SELECT user_id FROM public.user_roles WHERE role = 'developer' LIMIT 1))::text, true);
 --   SET LOCAL ROLE authenticated;
---   SELECT (SELECT count(*) FROM public.dealers) = 0             AS b1_no_role_no_dealers,     -- expect true
---          (SELECT count(*) FROM public.inventory_snapshots) = 0 AS b2_no_role_no_snapshots,   -- expect true
---          (SELECT count(*) FROM public.map_config) = 0          AS b3_no_role_no_map_config;  -- expect true
---   RESET ROLE;
+--   SELECT (SELECT count(*) FROM public.dealers) > 0 AS c1_reads_dealers,
+--          EXISTS (SELECT 1 FROM public.user_roles ur
+--                  WHERE ur.user_id = auth.uid() AND ur.role = 'developer') AS c2_map_config_write_allowed;
+-- ROLLBACK;
 --
---   -- c) anon sees nothing and cannot read user_roles at all.
+-- -- d) Authenticated WITHOUT a DealerIQ role (random uuid) sees nothing.
+-- BEGIN READ ONLY;
+--   SELECT set_config('request.jwt.claims', json_build_object('role','authenticated','sub', gen_random_uuid())::text, true);
+--   SET LOCAL ROLE authenticated;
+--   SELECT (SELECT count(*) FROM public.dealers) = 0             AS d1, (SELECT count(*) FROM public.dealer_groups) = 0  AS d2,
+--          (SELECT count(*) FROM public.vehicles) = 0            AS d3, (SELECT count(*) FROM public.vin_presence) = 0   AS d4,
+--          (SELECT count(*) FROM public.inventory_snapshots) = 0 AS d5, (SELECT count(*) FROM public.inventory_events) = 0 AS d6,
+--          (SELECT count(*) FROM public.monthly_sales) = 0       AS d7, (SELECT count(*) FROM public.market_signals) = 0 AS d8,
+--          (SELECT count(*) FROM public.scrape_log) = 0          AS d9, (SELECT count(*) FROM public.map_config) = 0     AS d10,
+--          (SELECT count(*) FROM public.user_roles) = 0          AS d11;
+-- ROLLBACK;
+--
+-- -- e) anon sees nothing.
+-- BEGIN READ ONLY;
 --   SET LOCAL ROLE anon;
---   SELECT (SELECT count(*) FROM public.dealers) = 0 AS c1_anon_no_dealers;                    -- expect true
---   RESET ROLE;
+--   SELECT (SELECT count(*) FROM public.dealers) = 0 AS e1, (SELECT count(*) FROM public.inventory_events) = 0 AS e2;
 -- ROLLBACK;
 --
--- -- d) Clients cannot write roles (each must fail with "permission denied").
--- BEGIN; SET LOCAL ROLE authenticated;
---   INSERT INTO public.user_roles (user_id, role) VALUES (gen_random_uuid(), 'developer');
--- ROLLBACK;
--- BEGIN; SET LOCAL ROLE anon; SELECT 1 FROM public.user_roles LIMIT 1; ROLLBACK;
+-- -- f) Clients cannot create/update/delete role assignments (privileges).
+-- SELECT NOT has_table_privilege(r, 'public.user_roles', p) AS denied, r, p
+-- FROM unnest(ARRAY['anon','authenticated']) r,
+--      unnest(ARRAY['INSERT','UPDATE','DELETE','TRUNCATE','MAINTAIN']) p;
+-- SELECT NOT has_table_privilege('anon', 'public.user_roles', 'SELECT') AS f_anon_no_select;
 --
--- -- e) App regression: log in to dealersintel.com as an existing dealer_principal
--- --    and open Market Intel, The Market, Market Pulse, Compare, Locations, a
--- --    dealer page and a VIN page. As the developer, save one Map Configuration
--- --    value. Confirm a DBRAIN scrape and the TIME diagnostics page still work.
+-- -- g) No client write path on market tables or settings except the developer
+-- --    map_config policy (expect exactly one row: map_config_write_developer).
+-- SELECT tablename, policyname, cmd FROM pg_policies
+-- WHERE schemaname = 'public' AND cmd IN ('INSERT','UPDATE','DELETE','ALL')
+--   AND tablename IN ('dealers','dealer_groups','vehicles','vin_presence','inventory_snapshots',
+--                     'inventory_events','monthly_sales','market_signals','scrape_log','map_config','user_roles');
+--
+-- -- h) App regression (normal use, not a security write test): log in to
+-- --    dealersintel.com as an existing dealer_principal and open Market Intel,
+-- --    The Market, Market Pulse, Compare, Locations, a dealer page and a VIN page.
+-- --    Confirm the next DBRAIN scrape and the TIME diagnostics page still work.
 
 
 -- =============================================================================
@@ -165,7 +230,7 @@ COMMIT;
 -- ALTER POLICY market_signals_select_authenticated      ON public.market_signals      USING (true);
 -- ALTER POLICY scrape_log_select_authenticated          ON public.scrape_log          USING (true);
 -- ALTER POLICY map_config_select_authenticated          ON public.map_config          USING (true);
--- GRANT INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES ON public.user_roles TO anon, authenticated;
+-- GRANT INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES, MAINTAIN ON public.user_roles TO anon, authenticated;
 -- GRANT SELECT ON public.user_roles TO anon;
 -- DROP FUNCTION IF EXISTS public.has_dealeriq_role();
 -- COMMIT;
