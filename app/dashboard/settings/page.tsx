@@ -1,5 +1,7 @@
 import { createServerSupabase } from "@/lib/supabase-server";
-import RoleGuard from "@/components/RoleGuard";
+import { denyUnlessRole } from "@/components/RoleGuard";
+import { ADMIN_ROLES } from "@/lib/authz";
+import { INVITE_MESSAGES, isInviteOutcome } from "@/lib/invite";
 import MapConfigPanel from "@/components/MapConfigPanel";
 import type { ScrapeLog } from "@/types";
 
@@ -18,9 +20,14 @@ function getStatusBadge(runAt: string, status: string) {
   return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-900/50 text-emerald-300 border border-emerald-800"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Live</span>;
 }
 
-export default async function SettingsPage({ searchParams }: { searchParams: { invited?: string } }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ invite?: string }> }) {
+  // Check before loading any admin data.
+  const denied = await denyUnlessRole(ADMIN_ROLES);
+  if (denied) return denied;
+
   const supabase = await createServerSupabase();
-  const invited = searchParams?.invited === "true";
+  const { invite } = await searchParams;
+  const inviteMessage = isInviteOutcome(invite) ? INVITE_MESSAGES[invite] : null;
 
   const { data: mapConfigData } = await supabase
     .from("map_config")
@@ -40,17 +47,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: { i
   }
 
   return (
-    <RoleGuard roles={["developer"]}>
+    <>
       <div className="p-6 space-y-8 max-w-5xl">
         <div>
           <h1 className="text-white text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-gray-500 text-sm mt-1">Platform configuration and access management</p>
         </div>
 
-        {invited && (
-          <div className="flex items-center gap-3 px-5 py-4 bg-emerald-900/30 border border-emerald-700 rounded-xl">
+        {inviteMessage?.tone === "success" && (
+          <div role="status" className="flex items-center gap-3 px-5 py-4 bg-emerald-900/30 border border-emerald-700 rounded-xl">
             <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-            <p className="text-emerald-300 text-sm font-medium">Invitation sent successfully. The user will receive an email with instructions to access the platform.</p>
+            <p className="text-emerald-300 text-sm font-medium">{inviteMessage.text}</p>
+          </div>
+        )}
+        {inviteMessage?.tone === "error" && (
+          <div role="alert" className="flex items-center gap-3 px-5 py-4 bg-red-900/30 border border-red-800 rounded-xl">
+            <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+            <p className="text-red-300 text-sm font-medium">{inviteMessage.text}</p>
           </div>
         )}
 
@@ -133,7 +146,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { i
 
                 <div className="space-y-1.5">
                   <label className="text-xs text-gray-400 font-medium uppercase tracking-wider">Access Role <span className="text-red-400">*</span></label>
-                  <select name="role" required className="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors appearance-none cursor-pointer">
+                  <select name="role" required defaultValue="" className="w-full px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors appearance-none cursor-pointer">
                     <option value="" disabled>Select a role...</option>
                     {ROLES.map((role) => (
                       <option key={role.value} value={role.value}>{role.label}</option>
@@ -179,6 +192,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: { i
         </div>
 
       </div>
-    </RoleGuard>
+    </>
   );
 }

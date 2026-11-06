@@ -1,3 +1,6 @@
+import { denyUnlessRole } from "@/components/RoleGuard";
+import { DEALERIQ_ROLES } from "@/lib/authz";
+
 const briefs = [
   {
     date: "May 5, 2026",
@@ -9,7 +12,10 @@ const briefs = [
   },
 ];
 
-export default function MarketBriefArchivePage() {
+export default async function MarketBriefArchivePage() {
+  const denied = await denyUnlessRole(DEALERIQ_ROLES);
+  if (denied) return denied;
+
   return (
     <div className="min-h-screen bg-gray-950 text-white px-6 py-6">
       <div className="mb-6">

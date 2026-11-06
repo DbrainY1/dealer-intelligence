@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isDealerIqRole } from "@/lib/authz";
 
 const links = [
   { href: "/dashboard", label: "Market Intel", exact: true },
@@ -15,6 +16,9 @@ export default function NavLinks({ role }: { role: string | null }) {
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
+
+  // No DealerIQ role → no dashboard links (the pages would deny access anyway).
+  if (!isDealerIqRole(role)) return null;
 
   return (
     <nav className="flex items-center gap-4 text-sm">

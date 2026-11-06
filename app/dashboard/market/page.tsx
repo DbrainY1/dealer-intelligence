@@ -1,5 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
+import { DEALERIQ_ROLES } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,7 @@ export default async function TheMarketPage() {
       : [];
 
   return (
-    <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
+    <RoleGuard roles={DEALERIQ_ROLES}>
       <div className="min-h-screen bg-gray-950 text-white px-6 py-6">
       <div className="mb-6">
         <p className="text-xs uppercase tracking-[0.25em] text-blue-400 font-semibold">
