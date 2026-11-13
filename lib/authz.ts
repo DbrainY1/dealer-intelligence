@@ -62,3 +62,25 @@ export async function loadAuthContext(lookups: AuthLookups): Promise<AuthContext
     role: error ? null : row?.role ?? null,
   };
 }
+
+// ── Platform Owner (Super Admin) ─────────────────────────────────────────────
+//
+// A separate designation, not a DealerIQ role: it comes only from the caller's
+// row in public.platform_owners (keyed by auth.users.id; clients can read their
+// own row and cannot write any). It is never derived from user_roles values,
+// user_metadata or an email comparison, so a developer cannot become an owner
+// by editing anything they control.
+
+export type OwnerLookup = (userId: string) => Promise<{ data: { user_id: string } | null; error: unknown }>;
+
+// Any lookup error (including the table not existing yet) fails closed.
+export async function loadIsPlatformOwner(userId: string | null, lookup: OwnerLookup): Promise<boolean> {
+  if (!userId) return false;
+  const { data, error } = await lookup(userId);
+  return !error && data?.user_id === userId;
+}
+
+export function decideOwnerAccess(userId: string | null, isOwner: boolean): AccessDecision {
+  if (!userId) return "unauthenticated";
+  return isOwner ? "ok" : "forbidden";
+}

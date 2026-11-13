@@ -1,4 +1,5 @@
 import TopNav from "@/components/TopNav";
+import ActivityBeacon from "@/components/ActivityBeacon";
 import { AccessDenied, denyUnlessRole } from "@/components/RoleGuard";
 import { DEALERIQ_ROLES } from "@/lib/authz";
 import type { ReactNode } from "react";
@@ -16,7 +17,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         {denied ? (
           <AccessDenied message="Your account doesn't have DealerIQ access yet. If you were just invited, ask your DealerIQ administrator to confirm your access." />
         ) : (
-          children
+          <>
+            <ActivityBeacon />
+            {children}
+          </>
         )}
       </main>
     </div>
