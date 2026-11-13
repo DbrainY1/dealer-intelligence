@@ -11,18 +11,19 @@ const links = [
   { href: "/dashboard/locations", label: "Locations" },
 ];
 
-export default function NavLinks({ role }: { role: string | null }) {
+export default function NavLinks({ role, isOwner = false }: { role: string | null; isOwner?: boolean }) {
   const pathname = usePathname();
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
-  // No DealerIQ role → no dashboard links (the pages would deny access anyway).
-  if (!isDealerIqRole(role)) return null;
+  const hasRole = isDealerIqRole(role);
+  // No DealerIQ role and not an owner → no links (the pages would deny access anyway).
+  if (!hasRole && !isOwner) return null;
 
   return (
     <nav className="flex items-center gap-4 text-sm">
-      {links.map(({ href, label, exact }) => (
+      {hasRole && links.map(({ href, label, exact }) => (
         <Link
           key={href}
           href={href}
@@ -35,7 +36,7 @@ export default function NavLinks({ role }: { role: string | null }) {
           {label}
         </Link>
       ))}
-      {role === "developer" && (
+      {hasRole && role === "developer" && (
         <Link
           href="/dashboard/settings"
           className={`transition-colors pb-0.5 ${
@@ -45,6 +46,20 @@ export default function NavLinks({ role }: { role: string | null }) {
           }`}
         >
           Settings
+        </Link>
+      )}
+      {/* Shown only to Platform Owners (server-verified). The page and its APIs
+          enforce ownership themselves; hiding the link is not the control. */}
+      {isOwner && (
+        <Link
+          href="/super-admin"
+          className={`transition-colors pb-0.5 ${
+            isActive("/super-admin")
+              ? "text-amber-300 font-bold border-b-2 border-amber-300"
+              : "text-amber-400/80 hover:text-amber-300 border-b-2 border-transparent"
+          }`}
+        >
+          Super Admin
         </Link>
       )}
     </nav>

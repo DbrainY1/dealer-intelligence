@@ -2,6 +2,7 @@ import { createAdminSupabase } from "@/lib/supabase-server";
 import { getAuthContext } from "@/lib/authz-server";
 import { ADMIN_ROLES, decideAccess } from "@/lib/authz";
 import { inviteRedirectUrl, parseInviteForm, runInvite, type InviteOutcome } from "@/lib/invite";
+import { recordActivity } from "@/lib/activity-server";
 import { NextResponse } from "next/server";
 
 // The Add Member form posts here as a regular HTML form, so every outcome is a
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
     ctx.userId!,
     inviteRedirectUrl(process.env.DEALERIQ_SITE_URL),
   );
+
+  // Audit trail for the Super Admin console. Best-effort; never affects the invite.
+  await recordActivity(ctx.userId!, { type: "admin_event", action: `invite.${outcome}` });
 
   return backToSettings(req, outcome);
 }

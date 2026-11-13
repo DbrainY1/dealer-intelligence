@@ -1,6 +1,7 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 import { requireApiRole } from "@/lib/authz-server";
 import { ADMIN_ROLES } from "@/lib/authz";
+import { recordActivity } from "@/lib/activity-server";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -33,5 +34,6 @@ export async function POST(req: Request) {
     );
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await recordActivity(access.ctx.userId!, { type: "admin_event", action: "map_config.saved" });
   return NextResponse.json({ success: true });
 }

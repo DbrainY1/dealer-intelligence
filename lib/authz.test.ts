@@ -108,3 +108,47 @@ test("an invalid session is unauthenticated and skips the role lookup", async ()
   assert.equal(decideAccess(loaded, DEALERIQ_ROLES), "unauthenticated");
   assert.deepEqual(c.roleLookups, []);
 });
+
+// ── Platform Owner ───────────────────────────────────────────────────────────
+
+import { decideOwnerAccess, loadIsPlatformOwner } from "./authz.ts";
+
+const ownerLookup = (rows: Record<string, boolean>, error: unknown = null) => async (id: string) => ({
+  data: rows[id] ? { user_id: id } : null,
+  error,
+});
+
+test("Platform Owner: only a platform_owners row grants ownership", async () => {
+  assert.equal(await loadIsPlatformOwner("owner-1", ownerLookup({ "owner-1": true })), true);
+  assert.equal(decideOwnerAccess("owner-1", true), "ok");
+});
+
+test("Platform Owner: a developer without an owner row is forbidden", async () => {
+  const isOwner = await loadIsPlatformOwner("dev-2", ownerLookup({ "owner-1": true }));
+  assert.equal(isOwner, false);
+  assert.equal(decideOwnerAccess("dev-2", isOwner), "forbidden");
+  // The ordinary role rules are untouched: the same developer keeps admin access.
+  assert.equal(decideAccess(ctx("developer", "dev-2"), ADMIN_ROLES), "ok");
+});
+
+test("Platform Owner: dealer principals and viewers are forbidden", async () => {
+  for (const id of ["dp-1", "viewer-1"]) {
+    assert.equal(decideOwnerAccess(id, await loadIsPlatformOwner(id, ownerLookup({}))), "forbidden");
+  }
+});
+
+test("Platform Owner: unauthenticated callers never reach the lookup", async () => {
+  let called = false;
+  const isOwner = await loadIsPlatformOwner(null, async () => ((called = true), { data: { user_id: "x" }, error: null }));
+  assert.equal(isOwner, false);
+  assert.equal(called, false);
+  assert.equal(decideOwnerAccess(null, true), "unauthenticated");
+});
+
+test("Platform Owner: lookup errors (e.g. table not migrated yet) fail closed", async () => {
+  assert.equal(await loadIsPlatformOwner("owner-1", ownerLookup({ "owner-1": true }, { code: "PGRST205" })), false);
+});
+
+test("Platform Owner: a row for a DIFFERENT user does not grant ownership", async () => {
+  assert.equal(await loadIsPlatformOwner("dev-2", async () => ({ data: { user_id: "owner-1" }, error: null })), false);
+});
