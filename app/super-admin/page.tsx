@@ -1,8 +1,9 @@
 import { requireOwnerPage } from "@/lib/authz-server";
 import { isPageKey } from "@/lib/activity";
 import { parseActivityFilters } from "@/lib/super-admin";
+import { parseConsoleRoute } from "@/lib/super-admin-nav";
 import { loadConsoleData, queryActivity } from "@/lib/super-admin-data";
-import SuperAdminConsole, { CONSOLE_VIEWS, type ConsoleView } from "@/components/super-admin/SuperAdminConsole";
+import SuperAdminConsole from "@/components/super-admin/SuperAdminConsole";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,18 @@ export default async function SuperAdminPage({
   await requireOwnerPage();
 
   const params = await searchParams;
-  const view = (CONSOLE_VIEWS as readonly string[]).includes(params.view as string) ? (params.view as ConsoleView) : "overview";
+  const route = parseConsoleRoute(params);
   const filters = parseActivityFilters(params, isPageKey);
 
-  const [data, activity] = await Promise.all([
-    loadConsoleData(new Date()),
-    view === "activity" ? queryActivity(filters) : Promise.resolve({ rows: [], available: true }),
-  ]);
+  // History is read through the owner's session, so RLS enforces ownership too.
+  const history =
+    route.view === "activity"
+      ? queryActivity(filters)
+      : route.view === "user" && route.userId
+        ? queryActivity({ user: route.userId, page: null, type: null, from: null, to: null })
+        : Promise.resolve({ rows: [], available: true });
 
-  return <SuperAdminConsole data={data} view={view} filters={filters} activity={activity} />;
+  const [data, activity] = await Promise.all([loadConsoleData(new Date()), history]);
+
+  return <SuperAdminConsole data={data} route={route} filters={filters} activity={activity} />;
 }

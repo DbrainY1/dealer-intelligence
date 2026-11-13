@@ -128,3 +128,87 @@ test("activity filters accept only well-formed values", () => {
     { user: null, page: null, type: null, from: null, to: null },
   );
 });
+
+// ── Drill-down filters ───────────────────────────────────────────────────────
+
+import { ACTIVITY_FILTERS, USERS_FILTERS, USERS_FILTER_LABELS, filterDirectory, isMissingRole, isPendingInvite, summarizeUser } from "./super-admin.ts";
+
+function fixture() {
+  const users = [
+    user("owner"),
+    user("dev2"),
+    user("dp"),
+    user("viewer"),
+    user("pending", { invitedRole: "viewer", invitedAt: ago(60), confirmedAt: null, lastSignInAt: null }),
+    user("norole-online"),
+    user("old"),
+  ];
+  const roles = new Map([["owner", "developer"], ["dev2", "developer"], ["dp", "dealer_principal"], ["viewer", "viewer"], ["pending", "viewer"], ["old", "viewer"]]);
+  const presence: PresenceRow[] = [
+    { user_id: "owner", last_seen_at: ago(1), last_page: "super_admin" },
+    { user_id: "norole-online", last_seen_at: ago(2), last_page: "market_intel" },
+    { user_id: "dp", last_seen_at: ago(60 * 3), last_page: "compare" },
+    { user_id: "viewer", last_seen_at: ago(60 * 24 * 3), last_page: "locations" },
+    { user_id: "old", last_seen_at: ago(60 * 24 * 20), last_page: "locations" },
+  ];
+  const events = [view("dev2", 60 * 24 * 2)]; // page view without presence (e.g. purged) still counts
+  const { entries } = buildDirectory(users, roles, new Set(["owner"]), new Map(presence.map((p) => [p.user_id, p])), NOW);
+  return { entries, ctx: { presence, events, now: NOW } };
+}
+
+const ids = (xs: { id: string }[]) => xs.map((x) => x.id).sort();
+
+test("each filter selects exactly the intended accounts", () => {
+  const { entries, ctx } = fixture();
+  const f = (k: Parameters<typeof filterDirectory>[1]) => ids(filterDirectory(entries, k, ctx));
+  assert.deepEqual(f("all"), ids(entries));
+  assert.deepEqual(f("active_now"), ["norole-online", "owner"]);
+  assert.deepEqual(f("active_today"), ["dp", "norole-online", "owner"]);
+  assert.deepEqual(f("active_7d"), ["dev2", "dp", "norole-online", "owner", "viewer"]);
+  assert.deepEqual(f("developer"), ["dev2", "owner"]);
+  assert.deepEqual(f("dealer_principal"), ["dp"]);
+  assert.deepEqual(f("viewer"), ["old", "pending", "viewer"]);
+  assert.deepEqual(f("pending_invite"), ["pending"]);
+  assert.deepEqual(f("missing_role"), ["norole-online"]);
+});
+
+test("a KPI number always equals the length of the list it opens", () => {
+  const { entries, ctx } = fixture();
+  for (const k of USERS_FILTERS) {
+    const list = filterDirectory(entries, k, ctx);
+    assert.equal(new Set(list.map((e) => e.id)).size, list.length, `${k}: no duplicates`);
+  }
+  assert.equal(filterDirectory(entries, "active_7d", ctx).length, activeUserCount(ctx.presence, ctx.events, new Date(NOW.getTime() - 7 * 86_400_000)));
+});
+
+test("'missing role' and 'pending' do not depend on the online status", () => {
+  const { entries } = fixture();
+  const online = entries.find((e) => e.id === "norole-online")!;
+  assert.equal(online.status, "active_now"); // display status says online…
+  assert.equal(isMissingRole(online), true); // …but it still lacks a role
+  assert.equal(isMissingRole(entries.find((e) => e.id === "owner")!), false); // owners never "missing"
+  assert.equal(isPendingInvite(entries.find((e) => e.id === "pending")!), true);
+  assert.equal(isMissingRole({ role: null, isOwner: false, invitedAt: ago(5), confirmedAt: null }), false); // pending, not missing
+});
+
+test("every filter has a label and activity filters are marked as needing tracking", () => {
+  for (const k of USERS_FILTERS) assert.ok(USERS_FILTER_LABELS[k]);
+  assert.deepEqual([...ACTIVITY_FILTERS].sort(), ["active_7d", "active_now", "active_today"]);
+});
+
+test("empty directory gives empty results for every filter", () => {
+  for (const k of USERS_FILTERS) assert.deepEqual(filterDirectory([], k, { presence: [], events: [], now: NOW }), []);
+});
+
+test("summarizeUser counts only that user's events", () => {
+  const ev: ActivityRow[] = [
+    view("a", 1, "compare"), view("a", 2, "compare"), view("a", 3, "locations"), view("b", 1, "compare"),
+    { user_id: "a", occurred_at: ago(4), event_type: "admin_event", page: null, action: "invite.sent" },
+    { user_id: "a", occurred_at: ago(5), event_type: "security_event", page: null, action: "super_admin.page_denied" },
+  ];
+  assert.deepEqual(summarizeUser("a", ev), {
+    pageViews30d: 3, distinctPages: 2, adminEvents30d: 1, securityEvents30d: 1,
+    topPages: [{ page: "compare", views: 2 }, { page: "locations", views: 1 }],
+  });
+  assert.deepEqual(summarizeUser("nobody", ev), { pageViews30d: 0, distinctPages: 0, adminEvents30d: 0, securityEvents30d: 0, topPages: [] });
+});

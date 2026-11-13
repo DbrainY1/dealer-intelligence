@@ -124,3 +124,32 @@ test("the beacon sends only the pathname — no query string, hash or form data"
   assert.match(src, /JSON\.stringify\(\{ path, kind \}\)/);
   assert.doesNotMatch(src, /useSearchParams|location\.(search|hash|href)|FormData|document\.cookie/);
 });
+
+// ── Super Admin drill-downs: interaction and layout guarantees ───────────────
+
+test("Super Admin console: clickable elements are real links with a visible focus ring", () => {
+  const src = read(join(ROOT, "components/super-admin/SuperAdminConsole.tsx"));
+  assert.doesNotMatch(src, /^\s*["']use client["']/m, "console stays a server component");
+  assert.doesNotMatch(src, /onClick|role=["']button["']|tabIndex/, "no click handlers on non-interactive elements");
+  const links = src.match(/<Link\b[\s\S]*?>/g) ?? [];
+  assert.ok(links.length >= 5, "tabs, alerts, filter pills, user and text links");
+  for (const l of links) assert.match(l, /FOCUS|focus-visible/, l.slice(0, 80));
+  const card = read(join(ROOT, "components/KPICard.tsx"));
+  assert.match(card, /<Link[\s\S]*focus-visible:ring/);
+  assert.match(card, /if \(!href\)/, "cards without href render unchanged (static)");
+});
+
+test("Super Admin console: tables scroll horizontally and the user view is read-only", () => {
+  const src = read(join(ROOT, "components/super-admin/SuperAdminConsole.tsx"));
+  assert.match(src, /function Table[\s\S]*?overflow-x-auto/);
+  const user = src.slice(src.indexOf('view === "user"'), src.indexOf('view === "activity"'));
+  assert.ok(user.length > 200);
+  assert.doesNotMatch(user, /<form|method=|delete|Delete|updateUser|upsert|insert/, "no editing or deletion in the user view");
+  assert.doesNotMatch(src, /super-admin-data|createAdminSupabase|supabase-server/, "presentation never loads data itself");
+});
+
+test("drill-down routing goes through the validated parser", () => {
+  const page = read(join(ROOT, "app/super-admin/page.tsx"));
+  assert.match(page, /parseConsoleRoute\(params\)/);
+  assert.ok(page.indexOf("await requireOwnerPage()") < page.indexOf("parseConsoleRoute("));
+});
