@@ -15,7 +15,8 @@
 --   public.record_dealeriq_activity(...)  the ONLY write path for activity;
 --                              executable by service_role only. Coalesces page
 --                              views (same page within 5 min), caps each user at
---                              120 events/hour, and runs retention opportunistically.
+--                              120 events/hour, and enforces 90-day retention on
+--                              every event it writes.
 --   public.purge_dealeriq_activity(...)   90-day retention (service_role only).
 --
 -- SECURITY MODEL
@@ -255,10 +256,11 @@ BEGIN
   INSERT INTO public.dealeriq_activity (user_id, event_type, page, action)
   VALUES (p_user_id, p_event_type, p_page, p_action);
 
-  -- Opportunistic retention: no scheduler or extension required.
-  IF random() < 0.01 THEN
-    PERFORM public.purge_dealeriq_activity();
-  END IF;
+  -- Retention on every written event: an indexed range delete that is nearly
+  -- free when nothing has expired. No scheduler or extension required. Data
+  -- can outlive 90 days only while DealerIQ records no new events at all;
+  -- section (5) adds a daily schedule if a strict calendar guarantee is wanted.
+  PERFORM public.purge_dealeriq_activity();
 
   RETURN true;
 END;
@@ -271,8 +273,8 @@ COMMIT;
 
 
 -- =============================================================================
--- (5) OPTIONAL — scheduled retention instead of / in addition to the
---     opportunistic purge. Requires enabling pg_cron (available, not installed
+-- (5) OPTIONAL — scheduled retention in addition to the per-event purge, for
+--     a strict guarantee even when DealerIQ is idle. Requires enabling pg_cron (available, not installed
 --     on 2026-11-13) — a separate approval.
 -- =============================================================================
 -- CREATE EXTENSION IF NOT EXISTS pg_cron;

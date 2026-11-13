@@ -61,8 +61,9 @@ export const getIsPlatformOwner = cache(async (): Promise<boolean> => {
 
 // Super Admin pages call this before loading any data. Non-owners get a plain
 // 404 so the console's existence is not advertised; the attempt is logged as a
-// security event.
-export async function requireOwnerPage(): Promise<AuthContext> {
+// security event. Memoised per request: the layout and page both call it and
+// render concurrently, and one denied visit must be logged once.
+export const requireOwnerPage = cache(async (): Promise<AuthContext> => {
   const ctx = await getAuthContext();
   const decision = decideOwnerAccess(ctx.userId, await getIsPlatformOwner());
   if (decision === "unauthenticated") redirect("/");
@@ -71,7 +72,7 @@ export async function requireOwnerPage(): Promise<AuthContext> {
     notFound();
   }
   return ctx;
-}
+});
 
 // Every owner-only API route calls this first.
 export async function requireOwnerApi(): Promise<{ ok: true; ctx: AuthContext } | { ok: false; response: NextResponse }> {
