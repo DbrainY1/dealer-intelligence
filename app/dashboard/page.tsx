@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
+import { DEALERIQ_ROLES } from "@/lib/authz";
 import { cutoffLabel } from "@/lib/cutoff";
 import { loadMarketOverview } from "@/lib/dashboard-data";
 import { parseScope } from "@/lib/freshness";
@@ -115,7 +116,7 @@ export default async function DashboardPage({
   const fmtPct = (v: number | null) => (v === null ? "N/A" : `${v.toFixed(1)}%`);
 
   return (
-    <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
+    <RoleGuard roles={DEALERIQ_ROLES}>
       <div className="p-6 space-y-6">
         <h1 className="text-white text-xl font-bold">
           Market Overview —{" "}

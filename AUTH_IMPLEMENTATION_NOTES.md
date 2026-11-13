@@ -1,5 +1,10 @@
 # DealerIQ Auth Flow Implementation
 
+> **Superseded in part (2026-11-05, `fix/invite-authorization-repair`):** roles are no longer
+> written by `/auth/callback` or read from `user_metadata`. `/api/invite` assigns the
+> `user_roles` row server-side with the service-role client when the invite is sent, and every
+> dashboard page and API route checks the role via `lib/authz.ts`. See the PR for details.
+
 **Branch:** `feat/auth-invite-flow`  
 **Date:** 2026-05-14  
 **Status:** Ready for testing

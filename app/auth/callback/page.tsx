@@ -52,7 +52,7 @@ export default function AuthCallbackPage() {
 
           if (verifyError) {
             console.error('verifyOtp error:', verifyError)
-            setError('This link has expired or is invalid. Please request a new one.')
+            setError('This link has expired or has already been used. If you already created your password, sign in or use “Forgot password?” on the login page. Otherwise, ask your DealerIQ administrator to send a new invite.')
             setLoading(false)
             return
           }
@@ -70,7 +70,7 @@ export default function AuthCallbackPage() {
 
           if (sessionError) {
             console.error('Implicit session error:', sessionError)
-            setError('This link has expired. Ask your admin to send a new invite.')
+            setError('This link has expired or has already been used. If you already created your password, sign in or use “Forgot password?” on the login page. Otherwise, ask your DealerIQ administrator to send a new invite.')
             setLoading(false)
             return
           }
@@ -143,37 +143,8 @@ export default function AuthCallbackPage() {
         return
       }
 
-      // For invite flow only: create user_roles entry
-      if (authType === 'invite') {
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (user) {
-          // Get role from user_metadata, default to 'viewer' if missing/invalid
-          const metadataRole = user.user_metadata?.role
-          const validRoles = ['developer', 'dealer_principal', 'viewer']
-          let role = 'viewer' // default
-          
-          if (metadataRole && validRoles.includes(metadataRole)) {
-            role = metadataRole
-          } else {
-            console.warn(`Invalid or missing role in user_metadata: ${metadataRole}. Defaulting to 'viewer'.`)
-          }
-
-          // Upsert into user_roles (idempotent)
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .upsert(
-              { user_id: user.id, role: role },
-              { onConflict: 'user_id' }
-            )
-
-          if (roleError) {
-            console.error('Failed to create user_roles entry:', roleError)
-            // Don't block login for this — log warning but continue
-            console.warn('User can login but may lack proper role assignment. Admin should verify.')
-          }
-        }
-      }
+      // Access is assigned server-side by /api/invite when the invitation is
+      // sent; this page only sets the password and never writes a role.
 
       // Success — redirect to dashboard
       router.push('/dashboard')

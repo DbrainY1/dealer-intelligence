@@ -1,4 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { denyUnlessRole } from "@/components/RoleGuard";
+import { DEALERIQ_ROLES } from "@/lib/authz";
 import { loadSoldUnits } from "@/lib/sold-units";
 import Link from "next/link";
 import type { Dealer, DealerGroup, InventorySnapshot, InventoryEvent } from "@/types";
@@ -8,6 +10,9 @@ interface PageProps {
 }
 
 export default async function GroupPage({ params }: PageProps) {
+  const denied = await denyUnlessRole(DEALERIQ_ROLES);
+  if (denied) return denied;
+
   const supabase = await createServerSupabase();
 
   const { data: group } = await supabase

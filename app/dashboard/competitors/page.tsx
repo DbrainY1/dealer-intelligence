@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { createServerSupabase } from "@/lib/supabase-server";
 import RoleGuard from "@/components/RoleGuard";
+import { DEALERIQ_ROLES } from "@/lib/authz";
 import CompetitorsPageClient from "./CompetitorsPageClient";
 import { dedupeProjectedSold } from "@/lib/projected-sold";
 import { pacificDaysAgoStr } from "@/lib/dates";
@@ -317,7 +318,7 @@ export default async function CompetitorsPage({
   }));
 
   return (
-    <RoleGuard roles={['developer', 'dealer_principal', 'viewer']}>
+    <RoleGuard roles={DEALERIQ_ROLES}>
       <CompetitorsPageClient
         scopeBar={
           <MarketScopeBar

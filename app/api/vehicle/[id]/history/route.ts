@@ -1,9 +1,14 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { requireApiRole } from "@/lib/authz-server";
+import { DEALERIQ_ROLES } from "@/lib/authz";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const access = await requireApiRole(DEALERIQ_ROLES);
+  if (!access.ok) return access.response;
+
   const { id } = await params;
   const vehicleId = parseInt(id);
 

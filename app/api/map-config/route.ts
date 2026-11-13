@@ -1,10 +1,21 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { requireApiRole } from "@/lib/authz-server";
+import { ADMIN_ROLES } from "@/lib/authz";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
+  // RLS (map_config_write_developer) also enforces this; checked here so the
+  // route never depends on database policy alone.
+  const access = await requireApiRole(ADMIN_ROLES);
+  if (!access.ok) return access.response;
+
   const { updates } = await req.json();
 
-  if (!updates || !Array.isArray(updates)) {
+  if (
+    !Array.isArray(updates) ||
+    updates.length === 0 ||
+    !updates.every((u) => Number.isInteger(u?.id) && Number.isFinite(u?.value))
+  ) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
