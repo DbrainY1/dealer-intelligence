@@ -102,11 +102,94 @@ export function roleCounts(entries: DirectoryEntry[]): Record<string, number> {
 
 // Distinct users seen since `since`, using presence (covers heartbeats) and
 // page views together.
-export function activeUserCount(presence: PresenceRow[], events: ActivityRow[], since: Date): number {
+export function activeUserIds(presence: PresenceRow[], events: ActivityRow[], since: Date): Set<string> {
   const ids = new Set<string>();
   for (const p of presence) if (new Date(p.last_seen_at) >= since) ids.add(p.user_id);
   for (const e of events) if (e.event_type === "page_view" && new Date(e.occurred_at) >= since) ids.add(e.user_id);
-  return ids.size;
+  return ids;
+}
+
+export function activeUserCount(presence: PresenceRow[], events: ActivityRow[], since: Date): number {
+  return activeUserIds(presence, events, since).size;
+}
+
+// ── Drill-down filters ───────────────────────────────────────────────────────
+//
+// Each overview card and alert opens Users & access with one of these filters.
+// The card's number and the filtered list come from the SAME predicate, so
+// they always agree. Conditions are independent of the display status (an
+// online account without a role is still "missing a role").
+
+export const USERS_FILTERS = [
+  "all", "active_now", "active_today", "active_7d",
+  "developer", "dealer_principal", "viewer", "pending_invite", "missing_role",
+] as const;
+export type UsersFilter = (typeof USERS_FILTERS)[number];
+
+export const USERS_FILTER_LABELS: Record<UsersFilter, string> = {
+  all: "All DealerIQ users",
+  active_now: `Active now (last ${ACTIVE_NOW_MINUTES} minutes)`,
+  active_today: "Active today (Pacific time)",
+  active_7d: "Active in the last 7 days",
+  developer: "Developers",
+  dealer_principal: "Dealer Principals",
+  viewer: "Viewers",
+  pending_invite: "Invitations not yet accepted",
+  missing_role: "Accounts without a DealerIQ role",
+};
+
+/** Filters that need activity tracking to be meaningful. */
+export const ACTIVITY_FILTERS: readonly UsersFilter[] = ["active_now", "active_today", "active_7d"];
+
+export function isUsersFilter(v: unknown): v is UsersFilter {
+  return typeof v === "string" && (USERS_FILTERS as readonly string[]).includes(v);
+}
+
+export const isPendingInvite = (e: Pick<AuthUserLite, "invitedAt" | "confirmedAt">) => Boolean(e.invitedAt && !e.confirmedAt);
+export const isMissingRole = (e: Pick<DirectoryEntry, "role" | "isOwner" | "invitedAt" | "confirmedAt">) =>
+  !isDealerIqRole(e.role) && !e.isOwner && !isPendingInvite(e);
+
+export function filterDirectory(
+  entries: DirectoryEntry[],
+  filter: UsersFilter,
+  ctx: { presence: PresenceRow[]; events: ActivityRow[]; now: Date },
+): DirectoryEntry[] {
+  const activeSince = (since: Date) => {
+    const ids = activeUserIds(ctx.presence, ctx.events, since);
+    return entries.filter((e) => ids.has(e.id));
+  };
+  switch (filter) {
+    case "all": return entries;
+    case "active_now": return activeSince(new Date(ctx.now.getTime() - ACTIVE_NOW_MINUTES * 60_000));
+    case "active_today": return activeSince(startOfPacificDay(ctx.now));
+    case "active_7d": return activeSince(new Date(ctx.now.getTime() - 7 * 86_400_000));
+    case "developer":
+    case "dealer_principal":
+    case "viewer": return entries.filter((e) => e.role === filter);
+    case "pending_invite": return entries.filter(isPendingInvite);
+    case "missing_role": return entries.filter(isMissingRole);
+  }
+}
+
+export interface UserSummary {
+  pageViews30d: number;
+  distinctPages: number;
+  adminEvents30d: number;
+  securityEvents30d: number;
+  topPages: { page: string; views: number }[];
+}
+
+// Per-user totals over the rows provided (the console passes the last 30 days).
+export function summarizeUser(userId: string, events: ActivityRow[]): UserSummary {
+  const mine = events.filter((e) => e.user_id === userId);
+  const views = mine.filter((e) => e.event_type === "page_view" && e.page);
+  return {
+    pageViews30d: views.length,
+    distinctPages: new Set(views.map((e) => e.page)).size,
+    adminEvents30d: mine.filter((e) => e.event_type === "admin_event").length,
+    securityEvents30d: mine.filter((e) => e.event_type === "security_event").length,
+    topPages: topPages(mine, 5).map(({ page, views }) => ({ page, views })),
+  };
 }
 
 /** Start of the current Pacific calendar day, as an instant. */
