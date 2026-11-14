@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { CALLBACK_MESSAGES, isVerifierMissing, parseCallbackUrl, type CallbackErrorReason } from '@/lib/auth-callback'
 
 type AuthType = 'invite' | 'recovery' | null
 
@@ -17,76 +18,66 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Parse tokens from URL (PKCE or implicit flow) on mount
+  // Handle the email link once on mount. The ref guards against a second run
+  // (a PKCE code can only be exchanged once).
+  const handled = useRef(false)
   useEffect(() => {
+    if (handled.current) return
+    handled.current = true
+
     async function handleAuthCallback() {
+      const fail = (reason: CallbackErrorReason) => {
+        setError(CALLBACK_MESSAGES[reason])
+        setLoading(false)
+      }
       try {
-        // Detect flow type: email link (?token_hash=...) or implicit (#access_token=...)
-        const urlParams = new URLSearchParams(window.location.search)
-        const hashParams = new URLSearchParams(window.location.hash.substring(1))
-        
-        const tokenHash = urlParams.get('token_hash')
-        const urlType = urlParams.get('type') as AuthType
-        const implicitAccessToken = hashParams.get('access_token')
-        const implicitRefreshToken = hashParams.get('refresh_token')
-        const hashType = hashParams.get('type') as AuthType
+        const action = parseCallbackUrl(window.location.search, window.location.hash)
+        let userEmail: string | undefined
+        let determinedAuthType: AuthType = null
 
-        let sessionData
-        let determinedAuthType: AuthType = hashType || urlType || null
-
-        // Email link flow: ?token_hash=...&type=invite/recovery
-        if (tokenHash && urlType) {
-          // Validate type is one we support
-          if (urlType !== 'invite' && urlType !== 'recovery') {
-            console.error(`Unsupported link type: ${urlType}`)
-            setError('Unsupported link type.')
-            setLoading(false)
-            return
+        switch (action.kind) {
+          case 'pkce': {
+            // Password reset requested from the login page (PKCE).
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(action.code)
+            if (exchangeError) {
+              console.error('exchangeCodeForSession error:', exchangeError)
+              return fail(isVerifierMissing(exchangeError) ? 'verifier_missing' : 'expired')
+            }
+            userEmail = data.session?.user?.email
+            determinedAuthType = action.type
+            break
           }
-
-          console.log(`Email auth flow detected: ${urlType}`)
-          const { data, error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: urlType
-          })
-
-          if (verifyError) {
-            console.error('verifyOtp error:', verifyError)
-            setError('This link has expired or has already been used. If you already created your password, sign in or use “Forgot password?” on the login page. Otherwise, ask your DealerIQ administrator to send a new invite.')
-            setLoading(false)
-            return
+          case 'token_hash': {
+            const { data, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: action.tokenHash, type: action.type })
+            if (verifyError) {
+              console.error('verifyOtp error:', verifyError)
+              return fail('expired')
+            }
+            userEmail = data.session?.user?.email
+            determinedAuthType = action.type
+            break
           }
-
-          sessionData = data
-          determinedAuthType = urlType  // Type is explicit in URL
-        }
-        // Implicit flow: #access_token=...
-        else if (implicitAccessToken && implicitRefreshToken) {
-          console.log('Implicit flow detected, setting session from tokens')
-          const { data, error: sessionError } = await supabase.auth.setSession({
-            access_token: implicitAccessToken,
-            refresh_token: implicitRefreshToken,
-          })
-
-          if (sessionError) {
-            console.error('Implicit session error:', sessionError)
-            setError('This link has expired or has already been used. If you already created your password, sign in or use “Forgot password?” on the login page. Otherwise, ask your DealerIQ administrator to send a new invite.')
-            setLoading(false)
-            return
+          case 'implicit': {
+            const { data, error: sessionError } = await supabase.auth.setSession({
+              access_token: action.accessToken,
+              refresh_token: action.refreshToken,
+            })
+            if (sessionError) {
+              console.error('Implicit session error:', sessionError)
+              return fail('expired')
+            }
+            userEmail = data.session?.user?.email
+            determinedAuthType = action.type
+            break
           }
-
-          sessionData = data
-        }
-        // Neither flow detected
-        else {
-          console.error('No valid auth flow detected in URL')
-          setError('Invalid or expired link. Please request a new invite or password reset.')
-          setLoading(false)
-          return
+          case 'error':
+            console.error('Auth link rejected:', action.reason)
+            return fail(action.reason)
+          case 'none':
+            console.error('No valid auth flow detected in URL')
+            return fail('invalid')
         }
 
-        // Get user email from session (works for both flows)
-        const userEmail = sessionData?.session?.user?.email
         if (!userEmail) {
           setError('Could not retrieve user information. Please try again.')
           setLoading(false)

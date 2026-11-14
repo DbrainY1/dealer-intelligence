@@ -224,3 +224,16 @@ test("the public middleware matcher does not name protected routes", () => {
   assert.doesNotMatch(matcher, /super-admin|dashboard/, "Next.js publishes matchers to every browser");
   assert.match(mw, /PROTECTED_PREFIXES = \["\/dashboard", "\/super-admin"\]/);
 });
+
+// ── Password recovery links ──────────────────────────────────────────────────
+
+test("the auth callback exchanges PKCE codes and the reset form tags its links", () => {
+  const cb = read(join(ROOT, "app/auth/callback/page.tsx"));
+  assert.match(cb, /parseCallbackUrl\(window\.location\.search, window\.location\.hash\)/);
+  assert.match(cb, /exchangeCodeForSession\(action\.code\)/);
+  assert.match(cb, /verifyOtp\(/);
+  assert.match(cb, /setSession\(/);
+  assert.doesNotMatch(cb, /from\(\s*['"]user_roles['"]/, "the callback still never writes roles");
+  const login = read(join(ROOT, "app/page.tsx"));
+  assert.match(login, /resetPasswordForEmail\([\s\S]{0,200}\/auth\/callback\?type=recovery/);
+});

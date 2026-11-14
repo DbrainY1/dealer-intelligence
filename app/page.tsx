@@ -49,7 +49,8 @@ export default function LoginPage() {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(emailToReset, {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      // type=recovery travels with the PKCE ?code= so the callback knows what it is.
+      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
     });
 
     if (error) {
