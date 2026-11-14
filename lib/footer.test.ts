@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FOOTER_CONTENT, OWNER_LINKS, PLATFORM_LINKS, buildFooterModel, buildLabel } from "./footer.ts";
+import { BRAND_BLUE, BRAND_ORANGE, FOOTER_CONTENT, LEGAL_OWNER, OWNER_LINKS, PLATFORM_LINKS, POWERED_BY_BRAND, buildFooterModel, buildLabel } from "./footer.ts";
 
 const titles = (m: ReturnType<typeof buildFooterModel>) => m.columns.map((c) => c.title);
 const hrefs = (m: ReturnType<typeof buildFooterModel>) => m.columns.flatMap((c) => c.links.map((l) => l.href)).filter(Boolean) as string[];
@@ -39,9 +39,9 @@ test("support, feedback and legal stay disabled until approved content exists", 
 test("approved content switches the links on; malformed values do not", () => {
   const ok = buildFooterModel({ hasDealerIqRole: true, isOwner: false, year: 2026, content: { supportEmail: "help@example.com", privacyPath: "/privacy", termsPath: "/terms" } });
   const all = ok.columns.flatMap((c) => c.links);
-  assert.equal(all.find((l) => l.label === "Help & support")!.href, "mailto:help@example.com");
-  assert.equal(all.find((l) => l.label === "Send feedback")!.href, "mailto:help@example.com?subject=DealerIQ%20feedback");
-  assert.equal(all.find((l) => l.label === "Privacy policy")!.href, "/privacy");
+  assert.equal(all.find((l) => l.label === "Help & Support")!.href, "mailto:help@example.com");
+  assert.equal(all.find((l) => l.label === "Send Feedback")!.href, "mailto:help@example.com?subject=DealerIQ%20feedback");
+  assert.equal(all.find((l) => l.label === "Privacy Policy")!.href, "/privacy");
   const bad = buildFooterModel({ hasDealerIqRole: true, isOwner: false, year: 2026, content: { supportEmail: "not an email", privacyPath: "javascript:alert(1)", termsPath: "//evil.example/terms" } });
   for (const l of bad.columns.filter((c) => c.title !== "Platform").flatMap((c) => c.links)) assert.equal(l.href, null, l.label);
 });
@@ -54,13 +54,27 @@ test("build label shows only a real commit SHA — never a made-up version", () 
   assert.equal(buildFooterModel({ hasDealerIqRole: true, isOwner: false, year: 2026 }).buildLabel, null);
 });
 
-test("copyright uses the supplied year and the existing product description", () => {
-  const m = buildFooterModel({ hasDealerIqRole: true, isOwner: false, year: 2027 });
-  assert.equal(m.copyright, "© 2027 DealerIQ");
-  assert.equal(m.description, "Dealer Intelligence Platform");
+test("approved copyright: LV Business Solutions Inc., dynamic year", () => {
+  assert.equal(LEGAL_OWNER, "LV Business Solutions Inc.");
+  assert.equal(buildFooterModel({ hasDealerIqRole: true, isOwner: false, year: 2026 }).copyright, "© 2026 LV Business Solutions Inc. All rights reserved.");
+  assert.equal(buildFooterModel({ hasDealerIqRole: false, isOwner: false, year: 2027 }).copyright, "© 2027 LV Business Solutions Inc. All rights reserved.");
+});
+
+test("approved brand hierarchy: DealerIQ / Powered by Dealer's Intel / Automotive Market Intelligence", () => {
+  const m = buildFooterModel({ hasDealerIqRole: true, isOwner: false, year: 2026 });
+  assert.equal(m.productName, "DealerIQ");
+  assert.equal(m.poweredBy.prefix, "Powered by");
+  assert.equal(m.poweredBy.brand.map((s) => s.text).join(""), "Dealer's Intel");
+  assert.equal(m.description, "Automotive Market Intelligence");
+});
+
+test("Dealer's Intel uses the exact brand colors: Dealer blue, 's orange, Intel blue", () => {
+  assert.equal(BRAND_BLUE, "#3B82F6");
+  assert.equal(BRAND_ORANGE, "#FF9900");
+  assert.deepEqual(POWERED_BY_BRAND.map((s) => [s.text, s.color]), [["Dealer", "#3B82F6"], ["'s", "#FF9900"], [" Intel", "#3B82F6"]]);
 });
 
 test("Platform links match the main navigation set", () => {
   assert.deepEqual(PLATFORM_LINKS.map((l) => l.label), ["Market Intel", "The Market", "Market Pulse", "Compare", "Locations"]);
-  assert.equal(OWNER_LINKS.length, 3);
+  assert.deepEqual(OWNER_LINKS.map((l) => l.label), ["Super Admin", "Users & Access", "Security Events"]);
 });

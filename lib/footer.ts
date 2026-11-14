@@ -41,13 +41,30 @@ export interface FooterColumn {
   links: FooterLink[];
 }
 
+export interface BrandSegment {
+  text: string;
+  color: string;
+}
+
 export interface FooterModel {
   productName: string;
+  poweredBy: { prefix: string; brand: readonly BrandSegment[] };
   description: string;
   columns: FooterColumn[];
   copyright: string;
   buildLabel: string | null;
 }
+
+// Approved branding (owner decision, 2026-11-14). Dealer's Intel is the brand
+// name, not a legal entity; the legal owner and operator is LEGAL_OWNER.
+export const BRAND_BLUE = "#3B82F6";
+export const BRAND_ORANGE = "#FF9900";
+export const POWERED_BY_BRAND: readonly BrandSegment[] = [
+  { text: "Dealer", color: BRAND_BLUE },
+  { text: "'s", color: BRAND_ORANGE },
+  { text: " Intel", color: BRAND_BLUE },
+];
+export const LEGAL_OWNER = "LV Business Solutions Inc.";
 
 export const PLATFORM_LINKS: readonly FooterLink[] = [
   { label: "Market Intel", href: "/dashboard" },
@@ -60,8 +77,8 @@ export const PLATFORM_LINKS: readonly FooterLink[] = [
 const SA = "/super-admin";
 export const OWNER_LINKS: readonly FooterLink[] = [
   { label: "Super Admin", href: SA },
-  { label: "Users & access", href: usersHref(SA) },
-  { label: "Security events", href: securityEventsHref(SA) },
+  { label: "Users & Access", href: usersHref(SA) },
+  { label: "Security Events", href: securityEventsHref(SA) },
 ];
 
 const isEmail = (v: string) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(v);
@@ -93,25 +110,25 @@ export function buildFooterModel(input: {
   columns.push({
     title: "Support",
     links: [
-      { label: "Help & support", href: email ? `mailto:${email}` : null, unavailableNote: "Coming soon" },
-      { label: "Send feedback", href: email ? `mailto:${email}?subject=${encodeURIComponent("DealerIQ feedback")}` : null, unavailableNote: "Coming soon" },
+      { label: "Help & Support", href: email ? `mailto:${email}` : null, unavailableNote: "Coming soon" },
+      { label: "Send Feedback", href: email ? `mailto:${email}?subject=${encodeURIComponent("DealerIQ feedback")}` : null, unavailableNote: "Coming soon" },
     ],
   });
   columns.push({
     title: "Legal",
     links: [
-      { label: "Privacy policy", href: path(content.privacyPath), unavailableNote: "Not yet published" },
-      { label: "Terms of service", href: path(content.termsPath), unavailableNote: "Not yet published" },
+      { label: "Privacy Policy", href: path(content.privacyPath), unavailableNote: "Not yet published" },
+      { label: "Terms of Service", href: path(content.termsPath), unavailableNote: "Not yet published" },
     ],
   });
   if (input.isOwner) columns.push({ title: "Platform oversight", links: [...OWNER_LINKS] });
 
   return {
     productName: "DealerIQ",
-    // The product's existing description (app/layout.tsx metadata).
-    description: "Dealer Intelligence Platform",
+    poweredBy: { prefix: "Powered by", brand: POWERED_BY_BRAND },
+    description: "Automotive Market Intelligence",
     columns,
-    copyright: `© ${input.year} DealerIQ`,
+    copyright: `© ${input.year} ${LEGAL_OWNER} All rights reserved.`,
     buildLabel: buildLabel(input.build?.sha, input.build?.env),
   };
 }

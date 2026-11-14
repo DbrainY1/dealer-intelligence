@@ -46,9 +46,17 @@ export function FooterView({ model }: { model: FooterModel }) {
   return (
     <footer className="mt-12 border-t border-gray-800 bg-gray-950">
       <div className="max-w-[1600px] px-6 py-8 grid grid-cols-2 gap-8 md:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]">
-        <div className="col-span-2 md:col-span-1 space-y-2">
-          <p className="text-blue-400 font-bold text-lg tracking-tight">{model.productName}</p>
-          <p className="text-gray-500 text-sm">{model.description}</p>
+        <div className="col-span-2 md:col-span-1">
+          <p className="text-blue-400 font-bold text-lg tracking-tight leading-tight">{model.productName}</p>
+          <p className="mt-1 whitespace-nowrap leading-tight">
+            <span className="text-xs text-gray-500">{model.poweredBy.prefix} </span>
+            <span className="text-sm font-semibold tracking-tight">
+              {model.poweredBy.brand.map((seg) => (
+                <span key={seg.text} style={{ color: seg.color }}>{seg.text}</span>
+              ))}
+            </span>
+          </p>
+          <p className="mt-2 text-gray-500 text-sm">{model.description}</p>
         </div>
         {model.columns.map((col) => (
           <nav key={col.title} aria-label={`Footer: ${col.title}`}>
