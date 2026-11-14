@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const PROTECTED_PREFIXES = ["/dashboard", "/super-admin"];
+
 export async function middleware(req: NextRequest) {
   let supabaseResponse = NextResponse.next({ request: req });
 
@@ -28,7 +30,9 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (!session && (req.nextUrl.pathname.startsWith("/dashboard") || req.nextUrl.pathname.startsWith("/super-admin"))) {
+  // Protected prefixes live here, server-side only. The matcher below is
+  // deliberately generic because Next.js publishes matchers to every browser.
+  if (!session && PROTECTED_PREFIXES.some((p) => req.nextUrl.pathname.startsWith(p))) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
@@ -36,5 +40,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/super-admin/:path*"],
+  // Every page except static assets and API routes (APIs enforce their own auth).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
 };

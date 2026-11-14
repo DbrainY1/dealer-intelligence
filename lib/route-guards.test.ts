@@ -198,6 +198,33 @@ test("footer is server-rendered, in normal flow, and keyboard-accessible", () =>
   for (const layout of ["app/dashboard/layout.tsx", "app/super-admin/layout.tsx"]) assert.match(read(join(ROOT, layout)), /<SiteFooter \/>/, layout);
 });
 
+// ── Super Admin invisibility: nothing owner-only ships to browsers ───────────
+
+test("no client component contains owner-only labels, routes or flags", () => {
+  const leaks = sourceFiles
+    .filter((p) => /^\s*["']use client["']/m.test(read(p)))
+    // Comments are stripped by the minifier; check executable code only.
+    .filter((p) => /Super Admin|super-admin|isOwner|Platform oversight|Platform Oversight|platform_owners/.test(
+      read(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1"),
+    ))
+    .map(rel);
+  assert.deepEqual(leaks, []);
+});
+
+test("the owner nav link is rendered on the server, only for owners", () => {
+  const nav = read(join(ROOT, "components/TopNav.tsx"));
+  assert.doesNotMatch(nav, /^\s*["']use client["']/m);
+  assert.match(nav, /const isOwner = await getIsPlatformOwner\(\)/);
+  assert.match(nav, /\{isOwner && \(\s*<Link\s+href="\/super-admin"/);
+});
+
+test("the public middleware matcher does not name protected routes", () => {
+  const mw = read(join(ROOT, "middleware.ts"));
+  const matcher = mw.slice(mw.indexOf("export const config"));
+  assert.doesNotMatch(matcher, /super-admin|dashboard/, "Next.js publishes matchers to every browser");
+  assert.match(mw, /PROTECTED_PREFIXES = \["\/dashboard", "\/super-admin"\]/);
+});
+
 // ── Password recovery links ──────────────────────────────────────────────────
 
 test("the auth callback exchanges PKCE codes and the reset form tags its links", () => {

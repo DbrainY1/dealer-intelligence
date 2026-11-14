@@ -11,7 +11,7 @@ export default async function SuperAdminLayout({ children }: { children: ReactNo
   await requireOwnerPage();
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
-      <TopNav />
+      <TopNav current="super-admin" />
       <ActivityBeacon />
       <main className="flex-1">{children}</main>
       <SiteFooter />
