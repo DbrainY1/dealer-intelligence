@@ -153,3 +153,47 @@ test("drill-down routing goes through the validated parser", () => {
   assert.match(page, /parseConsoleRoute\(params\)/);
   assert.ok(page.indexOf("await requireOwnerPage()") < page.indexOf("parseConsoleRoute("));
 });
+
+// ── Site footer ──────────────────────────────────────────────────────────────
+
+test("every active footer link resolves to a real page", async () => {
+  const { OWNER_LINKS, PLATFORM_LINKS } = await import("./footer.ts");
+  for (const l of [...PLATFORM_LINKS, ...OWNER_LINKS]) {
+    const path = l.href!.split("?")[0];
+    const page = join(ROOT, "app", path, "page.tsx");
+    assert.ok(statSync(page).isFile(), `${l.label} → ${path}`);
+  }
+});
+
+test("no legal or support content is published without approval", () => {
+  for (const p of ["app/privacy", "app/terms", "app/legal", "app/support"]) {
+    assert.throws(() => statSync(join(ROOT, p)), `${p} must not exist until approved content is supplied`);
+  }
+  const src = read(join(ROOT, "components/SiteFooter.tsx")) + read(join(ROOT, "lib/footer.ts"));
+  assert.doesNotMatch(src, /we collect|personal (data|information)|governing law|liability|arbitration|warrant(y|ies)|indemnif/i);
+  // The only rights statement allowed is the owner-approved copyright line.
+  const rights = src.match(/[^\n]*all rights reserved[^\n]*/gi) ?? [];
+  assert.ok(rights.length >= 1 && rights.every((l) => l.includes("${LEGAL_OWNER} All rights reserved.")), rights.join(" | "));
+});
+
+test("the business address is not displayed anywhere in the app", () => {
+  const leaks = sourceFiles.filter((p) => /3333\s+Fremont|Las Vegas,?\s*NV\s*89104|89104/i.test(read(p))).map(rel);
+  assert.deepEqual(leaks, []);
+});
+
+test("footer brand text renders on one line with each segment's own color", () => {
+  const src = read(join(ROOT, "components/SiteFooter.tsx"));
+  assert.match(src, /whitespace-nowrap/);
+  assert.match(src, /style=\{\{ color: seg\.color \}\}/);
+  assert.match(src, /text-xs text-gray-500[^>]*>\{model\.poweredBy\.prefix\}/, "'Powered by' is smaller and muted");
+});
+
+test("footer is server-rendered, in normal flow, and keyboard-accessible", () => {
+  const src = read(join(ROOT, "components/SiteFooter.tsx"));
+  assert.doesNotMatch(src, /^\s*["']use client["']/m, "owner status must be decided on the server");
+  assert.match(src, /getIsPlatformOwner\(\)/);
+  assert.doesNotMatch(src, /className=[{"`][^>]*\b(fixed|sticky)\b/, "must not overlay page content");
+  assert.match(src, /focus-visible:ring/);
+  assert.match(src, /aria-disabled="true"/, "unavailable items are disabled text, not links");
+  for (const layout of ["app/dashboard/layout.tsx", "app/super-admin/layout.tsx"]) assert.match(read(join(ROOT, layout)), /<SiteFooter \/>/, layout);
+});

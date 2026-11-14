@@ -1,4 +1,5 @@
 import TopNav from "@/components/TopNav";
+import SiteFooter from "@/components/SiteFooter";
 import ActivityBeacon from "@/components/ActivityBeacon";
 import { AccessDenied, denyUnlessRole } from "@/components/RoleGuard";
 import { DEALERIQ_ROLES } from "@/lib/authz";
@@ -11,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const denied = await denyUnlessRole(DEALERIQ_ROLES);
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950 flex flex-col">
       <TopNav />
       <main className="flex-1">
         {denied ? (
@@ -23,6 +24,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           </>
         )}
       </main>
+      <SiteFooter />
     </div>
   );
 }
